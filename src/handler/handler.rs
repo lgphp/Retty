@@ -17,11 +17,10 @@ pub(crate) struct HeadHandler {}
 
 impl ChannelHandler for HeadHandler {
     fn id(&self) -> String {
-        return String::from("HEAD")
+        return String::from("HEAD");
     }
 
     fn channel_active(&self, ctx: Arc<Mutex<ChannelHandlerCtx>>) {
-        // println!("内置头部Handler: channel_active....");
         let mut ctx_clone = ctx.lock().unwrap();
         ctx_clone.fire_channel_active();
     }
@@ -36,6 +35,7 @@ impl HeadHandler {
         HeadHandler {}
     }
 }
+
 
 pub(crate) struct TailHandler {}
 

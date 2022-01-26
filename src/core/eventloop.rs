@@ -73,23 +73,20 @@ impl EventLoop {
                                 println!("close by remote peer.");
                                 ch.close();
                             }
-                            Ok(n) => {
-                                println!("收到数据 n :{}", n);
-                            }
+                            Ok(n) => {}
                             Err(e) => {}
                         }
                         if !ch.is_closed() {
                             let mut bytebuf = ByteBuf::new_from(&buf[..]);
                             println!("reactor-excutor :{}", thread::current().name().unwrap());
                             {
-                                // 注册成功后，执行有新客户端连接上来的回调
+                                // 将消息传到HEADER_HANDLER
                                 let ctx_pipe = channel_pipe_ctx_map.get_mut(&e.token()).unwrap();
                                 let mut ctx_head = ctx_pipe.header_handler_ctx();
                                 let head_handler_clone = ctx_pipe.header_handler().clone();
                                 let head_handler = head_handler_clone.lock().unwrap();
                                 head_handler.channel_read(ctx_head, &bytebuf);
                             }
-                            // 获取head
                         }
 
 

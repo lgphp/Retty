@@ -71,9 +71,6 @@ impl ChannelHandlerCtx {
         let current_ctx = ctx.lock().unwrap();
         let next_handler = current_ctx.handler.lock().unwrap();
         next_handler.channel_active(ctx.clone());
-        // self.channel.write(msg);
-        // let x = &self.in_handler;
-        // x.channel_active(  &mut self) ;
     }
 
     pub fn channel(&mut self) -> &mut Channel {
@@ -86,41 +83,5 @@ impl ChannelHandlerCtx {
 
         // self.in_handler
     }
-    //
-    // pub fn current_inbound_handler_index(&self) -> usize {
-    //     let id = self.id.clone();
-    //     let mut index = 0;
-    //     for (i, e) in self.inbound_handler_pipe.lock().unwrap().handlers.iter().enumerate() {
-    //         if e.id().eq(&self.current_handler_id) {
-    //             index = i;
-    //             println!("i:{}" , i)
-    //         }
-    //     }
-    //     index
-    // }
-    //
-    //
-    //
-    // pub(crate) fn channel_read(&mut self, message: &dyn Any) {
-    //     // 取得当前的handler 执行channel_read
-    //     let i = self.current_inbound_handler_index();
-    //     let mut guard = self.inbound_handler_pipe.lock().unwrap();
-    //     let h = guard.handlers.get_mut(i).unwrap();
-    //     h.channel_read(self, message);
-    // }
-    //
-    //
-    //
-    //
-    // pub fn fire_channel_read(&mut self, message: &dyn Any) {
-    //     let i = self.current_inbound_handler_index();
-    //     if !self.inbound_handler_pipe.lock().unwrap().handlers.get(i+1).is_none(){
-    //         let mut guard = self.inbound_handler_pipe.lock().unwrap();
-    //         let h =  guard.handlers.get(i+1).unwrap();
-    //         self.current_handler_id = h.id().clone();
-    //         h.channel_read(self, message);
-    //     }
-    //
-    // }
 }
 

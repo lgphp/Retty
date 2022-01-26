@@ -115,13 +115,12 @@ impl Bootstrap {
                             continue;
                         }
                     };
-                    // 创建ChannelHandlerCtxPipe
+                    // 创建ChannelHandlerPipe , 每一个连接创建自己的一套pipeline
                     let mut channel_handler_pipe: ChannelHandlerPipe = (channel_handler_pipe_fn_clone)();
                     //添加头handler
                     channel_handler_pipe.add_first(Box::new(HeadHandler::new()));
                     // 创建ChannelHandlerCtxPipe
                     let mut channel_handler_context_pipe = ChannelHandlerCtxPipe::new();
-
                     // 获得客户端连接，创建channel
                     let channel = Channel::create(Token(ch_id),
                                                   work_group.event_loop_group()[ch_id % work_group.event_loop_group().len()].excutor.clone(),

@@ -82,8 +82,4 @@ impl Channel {
     pub fn is_closed(&self) -> bool {
         self.closed
     }
-
-    // pub fn read(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
-    //     self.ctx.chan.read_to_end(buf)
-    // }
 }
