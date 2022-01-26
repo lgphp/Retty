@@ -1,3 +1,14 @@
+### Introduction
+
+Retty is a High performance I/O framework written by Rust inspired by Netty
+
+### Feature
+
+还没写完，刚实现了一小部分功能。 我会努力的。。。。。。
+
+### Quick Start
+
+```rust
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -91,3 +102,4 @@ fn main() {
         }).start();
     WaitGroup::new().clone().wait();
 }
+```
