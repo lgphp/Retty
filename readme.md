@@ -2,104 +2,47 @@
 
 Retty is a High performance I/O framework written by Rust inspired by Netty
 
+基于mio的IO多路复用高并发、高性能IO开发框架
+
 ### Feature
 
-还没写完，刚实现了一小部分功能。 我会努力的。。。。。。
+- IO多路复用模型
+- 内置Bytebuf数据容器
+- ChannelPipeline 模型
+- 默认支持TCP 未来支持UDP
+
+还没写完，刚实现了一部分功能。 我会努力的。。。。。。
+
+- 2022-1-28 : 完成出入站handler分离
+
+> Channel_Handler_Context 分离
+>
+> Channel_Handler_Context_Pipeline 分离
+>
+> 包装TCPStream 和 Channel
+>
+>
+
+// todo: implement
+
+- 内置固定消息长度字段解码器
+- 内置HTTP 协议解码器
+- 内置WebSocket 协议解码器
+- 内置flatBuffer 解码器
+- 内置protoBuffer 解码器
 
 ### Quick Start
 
-```rust
-use std::any::Any;
-use std::sync::{Arc, Mutex};
-use std::thread;
+```rust 
 
-use bytebuf_rs::bytebuf::ByteBuf;
-use crossbeam_utils::sync::WaitGroup;
-use rayon_core::ThreadPool;
-use uuid::Uuid;
+参见 main.rs
 
-use retty::core::bootstrap::Bootstrap;
-use retty::handler::channel_handler_ctx::ChannelHandlerCtx;
-use retty::handler::handler::ChannelHandler;
-use retty::handler::handler_pipe::ChannelHandlerPipe;
-
-struct BizHandler {
-    excutor: Arc<ThreadPool>,
-}
-
-impl BizHandler {
-    fn new() -> Self {
-        BizHandler {
-            excutor: Arc::new(rayon_core::ThreadPoolBuilder::new().num_threads(1).build().unwrap())
-        }
-    }
-}
-
-impl ChannelHandler for BizHandler {
-    fn id(&self) -> String {
-        return "biz_handler".to_string();
-    }
-
-    fn channel_active(&self, ctx: Arc<Mutex<ChannelHandlerCtx>>) {
-        let mut ctx_clone = ctx.lock().unwrap();
-        println!("业务处理 Handler --> : channel_active 新连接上线: {}", ctx_clone.channel().remote_addr().unwrap());
-    }
-
-    fn channel_read(&self, _ctx: Arc<Mutex<ChannelHandlerCtx>>, message: &dyn Any) {
-        let msg = message.downcast_ref::<String>().unwrap();
-        println!("业务处理 Handler  --> :收到消息:{}", msg);
-        println!("reactor-excutor :{}", thread::current().name().unwrap());
-        println!("========================================================");
-    }
-}
-
-
-struct Decoder {
-    excutor: Arc<ThreadPool>,
-}
-
-impl ChannelHandler for Decoder {
-    fn id(&self) -> String {
-        return "decoder_handler".to_string();
-    }
-
-    fn channel_active(&self, ctx: Arc<Mutex<ChannelHandlerCtx>>) {
-        let mut ctx_clone = ctx.lock().unwrap();
-        println!("解码 Handler --> : channel_active 新连接上线: {}", ctx_clone.channel().remote_addr().unwrap());
-        ctx_clone.fire_channel_active();
-    }
-
-    fn channel_read(&self, ctx: Arc<Mutex<ChannelHandlerCtx>>, message: &dyn Any) {
-        let msg = message.downcast_ref::<ByteBuf>().unwrap();
-        println!("解码 Handler --> 收到Bytebuf:");
-        msg.print_bytes();
-        let mut ctx_clone = ctx.lock().unwrap();
-        // 解码
-        let obj = String::from_utf8_lossy(msg.available_bytes()).to_string();
-        ctx_clone.fire_channel_read(&obj);
-    }
-}
-
-impl Decoder {
-    fn new() -> Self {
-        Decoder {
-            excutor: Arc::new(rayon_core::ThreadPoolBuilder::new().num_threads(1).build().unwrap())
-        }
-    }
-}
-
-
-fn main() {
-    let mut bootstrap = Bootstrap::new_server_bootstrap();
-    bootstrap.worker_group(8)
-        .initialize_handler_pipeline(|| {
-            let mut handler_pipe = ChannelHandlerPipe::new();
-            let decoder_handler = Box::new(Decoder::new());
-            let biz_handler = Box::new(BizHandler::new());
-            handler_pipe.add_last(decoder_handler);
-            handler_pipe.add_last(biz_handler);
-            handler_pipe
-        }).start();
-    WaitGroup::new().clone().wait();
-}
 ```
+
+### 鸣谢
+
+**创造使我快乐
+
+广交天下在高性能实时通信编程方面的朋友: lgphp2019@gmail.com
+
+
