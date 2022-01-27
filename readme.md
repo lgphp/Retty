@@ -2,10 +2,11 @@
 
 Retty is a High performance I/O framework written by Rust inspired by Netty
 
-基于mio的IO多路复用高并发、高性能IO开发框架
+基于mio的IO多路复用高并发、高性能网络通信开发框架
 
 ### Feature
 
+- Rayon 线程池包装 EventLoop / EventLoopGroup
 - IO多路复用模型
 - 内置Bytebuf数据容器
 - ChannelPipeline 模型
