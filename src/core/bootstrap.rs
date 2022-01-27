@@ -11,11 +11,11 @@ use mio::{Events, Poll, PollOpt, Ready, Token};
 use mio::net::TcpListener;
 use uuid::Uuid;
 
-use crate::core::eventloop::EventLoopGroup;
-use crate::handler::channel_handler_ctx::ChannelHandlerCtx;
-use crate::handler::channel_handler_ctx_pipe::ChannelHandlerCtxPipe;
-use crate::handler::handler::HeadHandler;
-use crate::handler::handler_pipe::ChannelHandlerPipe;
+use crate::core::eventloop::{EventLoop, EventLoopGroup};
+use crate::handler::channel_handler_ctx::ChannelInboundHandlerCtx;
+use crate::handler::channel_handler_ctx_pipe::{ChannelInboundHandlerCtxPipe, ChannelOutboundHandlerCtxPipe};
+use crate::handler::handler::{ChannelOutboundHandler, HeadHandler, TailHandler};
+use crate::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
 use crate::transport::channel::{Channel, ChannelOptions};
 
 pub struct Bootstrap {
@@ -23,7 +23,8 @@ pub struct Bootstrap {
     port: u16,
     boss_group: EventLoopGroup,
     worker_group: Option<Arc<EventLoopGroup>>,
-    channel_handler_pipe_fn: Option<Arc<dyn Fn() -> ChannelHandlerPipe + Send + Sync + 'static>>,
+    channel_inbound_handler_pipe_fn: Option<Arc<dyn Fn() -> ChannelInboundHandlerPipe + Send + Sync + 'static>>,
+    channel_outbound_handler_pipe_fn: Option<Arc<dyn Fn() -> ChannelOutboundHandlerPipe + Send + Sync + 'static>>,
     opts: HashMap<String, ChannelOptions>,
     stopped: Arc<AtomicBool>,
 
@@ -37,20 +38,27 @@ impl Bootstrap {
             port: 1511,
             boss_group: EventLoopGroup::new(1),
             worker_group: None,
-            channel_handler_pipe_fn: None,
+            channel_inbound_handler_pipe_fn: None,
+            channel_outbound_handler_pipe_fn: None,
             opts: HashMap::new(),
             stopped: Arc::new(AtomicBool::new(false)),
         }
     }
 
 
-    pub fn initialize_handler_pipeline<F>(&mut self, pipe_fn: F) -> &mut Self
-        where F: Fn() -> ChannelHandlerPipe + Send + Sync + 'static
+    pub fn initialize_inbound_handler_pipeline<F>(&mut self, pipe_fn: F) -> &mut Self
+        where F: Fn() -> ChannelInboundHandlerPipe + Send + Sync + 'static
     {
-        self.channel_handler_pipe_fn = Some(Arc::new(Box::new(pipe_fn)));
+        self.channel_inbound_handler_pipe_fn = Some(Arc::new(Box::new(pipe_fn)));
         self
     }
 
+    pub fn initialize_outbound_handler_pipeline<F>(&mut self, pipe_fn: F) -> &mut Self
+        where F: Fn() -> ChannelOutboundHandlerPipe + Send + Sync + 'static
+    {
+        self.channel_outbound_handler_pipe_fn = Some(Arc::new(Box::new(pipe_fn)));
+        self
+    }
 
     // 设置 worker_group
     pub fn worker_group(&mut self, n: usize) -> &mut Self {
@@ -67,16 +75,17 @@ impl Bootstrap {
             None => panic!("work_group error"),
             Some(g) => Arc::clone(g),
         };
-
-
         let ip_addr = self.host.parse().unwrap();
         let sock_addr = Arc::new(SocketAddr::new(ip_addr, self.port));
 
         let opts = self.opts.clone();
         let stopped = Arc::clone(&self.stopped);
 
-        let channel_handler_pipe_fn = &self.channel_handler_pipe_fn.as_ref().unwrap();
-        let channel_handler_pipe_fn_clone = Arc::clone(channel_handler_pipe_fn);
+        let channel_inbound_handler_pipe_fn = &self.channel_inbound_handler_pipe_fn.as_ref().unwrap();
+        let channel_inbound_handler_pipe_fn = Arc::clone(channel_inbound_handler_pipe_fn);
+        let channel_outbound_handler_pipe_fn = &self.channel_outbound_handler_pipe_fn.as_ref().unwrap();
+        let channel_outbound_handler_pipe_fn = Arc::clone(channel_outbound_handler_pipe_fn);
+
 
         boss_g.excutor.spawn(move || {
             let mut events = Events::with_capacity(1024);
@@ -100,6 +109,9 @@ impl Bootstrap {
             work_group.event_loop_group().iter().for_each(|e| e.run());
             //当服务器没有停的时候
             while !stopped.load(Ordering::Relaxed) {
+                let event_loop = work_group.event_loop_group()[ch_id % work_group.event_loop_group().len()].clone();
+                let curr_event_loop_executor = event_loop.clone().excutor.clone();
+
                 // 取出selector中的事件集合
                 match sel.poll(&mut events, None) {
                     Ok(_) => {}
@@ -115,46 +127,14 @@ impl Bootstrap {
                             continue;
                         }
                     };
-                    // 创建ChannelHandlerPipe , 每一个连接创建自己的一套pipeline
-                    let mut channel_handler_pipe: ChannelHandlerPipe = (channel_handler_pipe_fn_clone)();
-                    //添加头handler
-                    channel_handler_pipe.add_first(Box::new(HeadHandler::new()));
-                    // 创建ChannelHandlerCtxPipe
-                    let mut channel_handler_context_pipe = ChannelHandlerCtxPipe::new();
-                    // 获得客户端连接，创建channel
+
                     let channel = Channel::create(Token(ch_id),
-                                                  work_group.event_loop_group()[ch_id % work_group.event_loop_group().len()].excutor.clone(),
+                                                  event_loop.clone(),
                                                   sock.try_clone().unwrap());
 
-                    // 将这个ch注册到eventloop上的selector上， 一个eventloop里有多个channel
-                    for _i in 0..channel_handler_pipe.handlers.len() {
-                        let handler = channel_handler_pipe.handlers.remove(0);
-                        let id = handler.id().clone();
-                        let handler_arc = Arc::new(Mutex::new(handler));
-                        let ctx = Arc::new(Mutex::new(ChannelHandlerCtx::new(id, channel.clone(), handler_arc.clone())));
-                        channel_handler_context_pipe.add_last(ctx, handler_arc.clone());
-                    }
-
-                    let mut enumerate = channel_handler_context_pipe.channel_handler_ctx_pipe.iter().enumerate();
-                    for _i in 0..channel_handler_context_pipe.channel_handler_ctx_pipe.len() {
-                        let (_j, mut ctx) = enumerate.next().unwrap();
-                        let prev_ctx = ctx.clone();
-                        let mut curr = ctx.lock().unwrap();
-                        let next_context = channel_handler_context_pipe.channel_handler_ctx_pipe.get(_j + 1);
-                        match next_context {
-                            Some((mut next_ctx)) => {
-                                let next_ctx_clone = next_ctx.clone();
-                                let mut next_ctx_guard = next_ctx.lock().unwrap();
-                                curr.next = Some(next_ctx_clone);
-                                curr.next_handler = Some(next_ctx_guard.handler.clone());
-                                next_ctx_guard.prev = Some(prev_ctx);
-                            }
-                            None => {
-                                curr.next = None
-                            }
-                        }
-                    }
-                    work_group.event_loop_group()[ch_id % work_group.event_loop_group().len()].attach(ch_id, channel.clone(), channel_handler_context_pipe);
+                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
+                    let outbound_ctx_pipe = Bootstrap::create_channel_outbound_ctx_pipe(channel_outbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
+                    event_loop.clone().attach(ch_id, channel.clone(), inbound_ctx_pipe, outbound_ctx_pipe);
                     ch_id = Bootstrap::incr_id(ch_id);
                 }
             }
@@ -168,6 +148,125 @@ impl Bootstrap {
         } else {
             cur_id + 1
         }
+    }
+
+
+    ///
+    /// 创建入站处理pipeline
+    ///
+    fn create_channel_inbound_ctx_pipe(in_channel_handler_pipe_fn: Arc<dyn Fn() -> ChannelInboundHandlerPipe + Send + Sync>, event_loop: Arc<EventLoop>, channel: Channel) -> ChannelInboundHandlerCtxPipe
+    {
+        // 创建ChannelHandlerPipe , 每一个连接创建自己的一套pipeline
+        let mut channel_handler_pipe: ChannelInboundHandlerPipe = (in_channel_handler_pipe_fn)();
+        //添加头handler
+        channel_handler_pipe.add_first(Box::new(HeadHandler::new()));
+        // 创建ChannelHandlerCtxPipe
+        let mut channel_handler_context_pipe = ChannelInboundHandlerCtxPipe::new();
+        // 将这个ch注册到eventloop上的selector上， 一个eventloop里有多个channel
+        for _i in 0..channel_handler_pipe.handlers.len() {
+            let handler = channel_handler_pipe.handlers.remove(0);
+            let id = handler.id().clone();
+            let handler_arc = Arc::new(Mutex::new(handler));
+            let ctx = Arc::new(Mutex::new(ChannelInboundHandlerCtx::new(id, event_loop.clone(), channel.clone(), handler_arc.clone())));
+            channel_handler_context_pipe.add_last(ctx, handler_arc.clone());
+        }
+
+        let mut enumerate = channel_handler_context_pipe.channel_handler_ctx_pipe.iter().enumerate();
+        let ctx_pipe_len = channel_handler_context_pipe.channel_handler_ctx_pipe.len();
+
+        let head_ctx = channel_handler_context_pipe.channel_handler_ctx_pipe.get(0).unwrap().clone();
+        let head_handler = head_ctx.lock().unwrap().handler.clone();
+
+        for _i in 0..ctx_pipe_len {
+            let (_j, mut ctx) = enumerate.next().unwrap();
+
+            let prev_ctx = ctx.clone();
+            let mut curr = ctx.lock().unwrap();
+            curr.channel_handler_ctx_pipe = Some(channel_handler_context_pipe.clone());
+            if _j == 0 {
+                curr.head_handler = None;
+                curr.head_ctx = None;
+                curr.prev_ctx = None;
+                curr.prev_handler = None;
+            } else {
+                curr.head_handler = Some(head_handler.clone());
+                curr.head_ctx = Some(head_ctx.clone());
+            }
+            let next_context = channel_handler_context_pipe.channel_handler_ctx_pipe.get(_j + 1);
+            match next_context {
+                Some((mut next_ctx)) => {
+                    let next_ctx_clone = next_ctx.clone();
+                    let mut next_ctx_guard = next_ctx.lock().unwrap();
+                    curr.next_ctx = Some(next_ctx_clone);
+                    curr.next_handler = Some(next_ctx_guard.handler.clone());
+                    next_ctx_guard.prev_ctx = Some(prev_ctx);
+                    next_ctx_guard.prev_handler = Some(curr.handler.clone())
+                }
+                None => {
+                    curr.next_ctx = None;
+                    curr.next_handler = None;
+                }
+            }
+        }
+        return channel_handler_context_pipe.clone();
+    }
+
+
+    fn create_channel_outbound_ctx_pipe(out_channel_handler_pipe_fn: Arc<dyn Fn() -> ChannelOutboundHandlerPipe + Send + Sync>, event_loop: Arc<EventLoop>, channel: Channel) -> ChannelOutboundHandlerCtxPipe
+    {
+        // 创建ChannelHandlerPipe , 每一个连接创建自己的一套pipeline
+        let mut channel_handler_pipe: ChannelOutboundHandlerPipe = (out_channel_handler_pipe_fn)();
+        //添加头handler
+        channel_handler_pipe.add_first(Box::new(HeadHandler::new()));
+        // 创建ChannelHandlerCtxPipe
+        let mut channel_handler_context_pipe = ChannelOutboundHandlerCtxPipe::new();
+        // 将这个ch注册到eventloop上的selector上， 一个eventloop里有多个channel
+        for _i in 0..channel_handler_pipe.handlers.len() {
+            let handler = channel_handler_pipe.handlers.remove(0);
+            let id = handler.id().clone();
+            let handler_arc = Arc::new(Mutex::new(handler));
+            let ctx = Arc::new(Mutex::new(ChannelInboundHandlerCtx::new(id, event_loop.clone(), channel.clone(), handler_arc.clone())));
+            channel_handler_context_pipe.add_last(ctx, handler_arc.clone());
+        }
+
+        let mut enumerate = channel_handler_context_pipe.channel_handler_ctx_pipe.iter().enumerate();
+        let ctx_pipe_len = channel_handler_context_pipe.channel_handler_ctx_pipe.len();
+
+        let head_ctx = channel_handler_context_pipe.channel_handler_ctx_pipe.get(0).unwrap().clone();
+        let head_handler = head_ctx.lock().unwrap().handler.clone();
+
+        for _i in 0..ctx_pipe_len {
+            let (_j, mut ctx) = enumerate.next().unwrap();
+
+            let prev_ctx = ctx.clone();
+            let mut curr = ctx.lock().unwrap();
+            curr.channel_handler_ctx_pipe = Some(channel_handler_context_pipe.clone());
+            if _j == 0 {
+                curr.head_handler = None;
+                curr.head_ctx = None;
+                curr.prev_ctx = None;
+                curr.prev_handler = None;
+            } else {
+                curr.head_handler = Some(head_handler.clone());
+                curr.head_ctx = Some(head_ctx.clone());
+            }
+            let next_context = channel_handler_context_pipe.channel_handler_ctx_pipe.get(_j + 1);
+            match next_context {
+                Some((mut next_ctx)) => {
+                    let next_ctx_clone = next_ctx.clone();
+                    let mut next_ctx_guard = next_ctx.lock().unwrap();
+                    curr.next_ctx = Some(next_ctx_clone);
+                    curr.next_handler = Some(next_ctx_guard.handler.clone());
+                    next_ctx_guard.prev_ctx = Some(prev_ctx);
+                    next_ctx_guard.prev_handler = Some(curr.handler.clone())
+                }
+                None => {
+                    curr.next_ctx = None;
+                    curr.next_handler = None;
+                }
+            }
+        }
+        return channel_handler_context_pipe.clone();
     }
 }
 

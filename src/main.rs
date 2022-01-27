@@ -8,9 +8,9 @@ use rayon_core::ThreadPool;
 use uuid::Uuid;
 
 use retty::core::bootstrap::Bootstrap;
-use retty::handler::channel_handler_ctx::ChannelHandlerCtx;
-use retty::handler::handler::ChannelHandler;
-use retty::handler::handler_pipe::ChannelHandlerPipe;
+use retty::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutboundHandlerCtx};
+use retty::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
+use retty::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
 
 struct BizHandler {
     excutor: Arc<ThreadPool>,
@@ -24,17 +24,17 @@ impl BizHandler {
     }
 }
 
-impl ChannelHandler for BizHandler {
+impl ChannelInboundHandler for BizHandler {
     fn id(&self) -> String {
         return "biz_handler".to_string();
     }
 
-    fn channel_active(&self, ctx: Arc<Mutex<ChannelHandlerCtx>>) {
-        let mut ctx_clone = ctx.lock().unwrap();
-        println!("业务处理 Handler --> : channel_active 新连接上线: {}", ctx_clone.channel().remote_addr().unwrap());
+    fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
+        let mut ctx = channel_handler_ctx.lock().unwrap();
+        println!("业务处理 Handler --> : channel_active 新连接上线: {}", ctx.channel().remote_addr().unwrap());
     }
 
-    fn channel_read(&self, _ctx: Arc<Mutex<ChannelHandlerCtx>>, message: &dyn Any) {
+    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
         let msg = message.downcast_ref::<String>().unwrap();
         println!("业务处理 Handler  --> :收到消息:{}", msg);
         println!("reactor-excutor :{}", thread::current().name().unwrap());
@@ -47,25 +47,25 @@ struct Decoder {
     excutor: Arc<ThreadPool>,
 }
 
-impl ChannelHandler for Decoder {
+impl ChannelInboundHandler for Decoder {
     fn id(&self) -> String {
-        return "decoder_handler".to_string();
+        return "encoder_handler".to_string();
     }
 
-    fn channel_active(&self, ctx: Arc<Mutex<ChannelHandlerCtx>>) {
-        let mut ctx_clone = ctx.lock().unwrap();
-        println!("解码 Handler --> : channel_active 新连接上线: {}", ctx_clone.channel().remote_addr().unwrap());
-        ctx_clone.fire_channel_active();
+    fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
+        let mut ctx = channel_handler_ctx.lock().unwrap();
+        println!("解码 Handler --> : channel_active 新连接上线: {}", ctx.channel().remote_addr().unwrap());
+        ctx.fire_channel_active();
     }
 
-    fn channel_read(&self, ctx: Arc<Mutex<ChannelHandlerCtx>>, message: &dyn Any) {
+    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
         let msg = message.downcast_ref::<ByteBuf>().unwrap();
         println!("解码 Handler --> 收到Bytebuf:");
         msg.print_bytes();
-        let mut ctx_clone = ctx.lock().unwrap();
+        let mut ctx = channel_handler_ctx.lock().unwrap();
         // 解码
         let obj = String::from_utf8_lossy(msg.available_bytes()).to_string();
-        ctx_clone.fire_channel_read(&obj);
+        ctx.fire_channel_read(&obj);
     }
 }
 
@@ -78,16 +78,51 @@ impl Decoder {
 }
 
 
+struct Encoder {
+    excutor: Arc<ThreadPool>,
+}
+
+impl ChannelOutboundHandler for Encoder {
+    fn id(&self) -> String {
+        return "decoder_handler".to_string();
+    }
+
+
+    fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, message: &dyn Any) {
+        // let mut ctx = channel_handler_ctx.lock().unwrap();
+        // println!("编码");
+        // let msg = message.downcast_ref::<String>().unwrap();
+        // let buf = ByteBuf::new_from(msg.as_bytes());
+        // ctx.fire_channel_write(&buf);
+    }
+}
+
+impl Encoder {
+    fn new() -> Self {
+        Encoder {
+            excutor: Arc::new(rayon_core::ThreadPoolBuilder::new().num_threads(1).build().unwrap())
+        }
+    }
+}
+
+
 fn main() {
     let mut bootstrap = Bootstrap::new_server_bootstrap();
     bootstrap.worker_group(8)
-        .initialize_handler_pipeline(|| {
-            let mut handler_pipe = ChannelHandlerPipe::new();
+        .initialize_inbound_handler_pipeline(|| {
+            let mut handler_pipe = ChannelInboundHandlerPipe::new();
             let decoder_handler = Box::new(Decoder::new());
             let biz_handler = Box::new(BizHandler::new());
             handler_pipe.add_last(decoder_handler);
             handler_pipe.add_last(biz_handler);
             handler_pipe
-        }).start();
+        }).initialize_outbound_handler_pipeline(|| {
+        let mut handler_pipe = ChannelOutboundHandlerPipe::new();
+        let encoder_handler = Box::new(Encoder::new());
+        handler_pipe.add_last(encoder_handler);
+        handler_pipe
+    })
+
+        .start();
     WaitGroup::new().clone().wait();
 }

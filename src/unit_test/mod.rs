@@ -6,15 +6,32 @@ use rayon_core::ThreadPool;
 use uuid::Uuid;
 
 use crate::core::bootstrap::Bootstrap;
-use crate::handler::channel_handler_ctx::ChannelHandlerCtx;
 
 #[test]
-pub fn test_create_server() {
-    let ctx = vec![0u8];
-    let v = Arc::new(Mutex::new(Box: new(ctx)));
-    let v1 = v.clone();
-    let v2 = v1.clone();
+pub fn test_create_server() {}
+
+
+struct A {
+    s: Mutex<String>,
 }
 
 
-fn read(v: Arc<Mutex<Box<Vec<u8>>>>) {}
+impl A {
+    fn print_s(&self) {
+        let guard = self.s.lock().unwrap();
+        println!("s:{}", guard);
+    }
+}
+
+#[test]
+pub fn test_mutex() {
+    let a = Mutex::new(A {
+        s: Mutex::new(String::from("ssss"))
+    });
+
+    let a_obj = a.lock().unwrap();
+    println!("1111");
+    a_obj.print_s();
+}
+
+

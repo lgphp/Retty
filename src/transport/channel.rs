@@ -3,9 +3,13 @@ use std::io::{Read, Result, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use bytebuf_rs::bytebuf::ByteBuf;
+use chashmap::CHashMap;
 use mio::{Poll, PollOpt, Ready, Token};
 use mio::net::TcpStream;
 use rayon_core::ThreadPool;
+
+use crate::core::eventloop::EventLoop;
 
 #[derive(Clone)]
 pub enum ChannelOptions {
@@ -15,10 +19,10 @@ pub enum ChannelOptions {
 
 
 pub struct Channel {
-    excutor: Arc<ThreadPool>,
     id: Token,
     stream: TcpStream,
     closed: bool,
+    eventloop: Arc<EventLoop>,
 
 }
 
@@ -26,10 +30,10 @@ pub struct Channel {
 impl Clone for Channel {
     fn clone(&self) -> Self {
         Channel {
-            excutor: self.excutor.clone(),
             id: self.id.clone(),
             stream: self.stream.try_clone().unwrap(),
             closed: false,
+            eventloop: self.eventloop.clone()
         }
     }
 
@@ -39,13 +43,13 @@ impl Clone for Channel {
 }
 
 impl Channel {
-    pub fn create(id: Token, excutor: Arc<ThreadPool>, stream: TcpStream,
+    pub fn create(id: Token, eventloop: Arc<EventLoop>, stream: TcpStream,
     ) -> Channel {
         Channel {
-            excutor,
             id,
             stream,
             closed: false,
+            eventloop,
         }
     }
 
@@ -54,11 +58,16 @@ impl Channel {
         self.stream.peer_addr()
     }
 
-    pub fn write(&mut self, message: &dyn Any) {
-        let x = message.downcast_ref::<&[u8]>().unwrap();
 
-        self.stream.write(x);
-        println!("{:?}", x)
+    // 从pipeline 最开始写
+    // pub fn write(&mut self, message: &dyn Any) {
+    //     println!("self.eventloop.channel_handler_ctx_pipe_map:size{}" , self.eventloop.channel_handler_ctx_pipe_map.len());
+    //     let pipe = self.eventloop.channel_handler_ctx_pipe_map.get(&self.id).unwrap();
+    //     pipe.head_channel_write(message);
+    // }
+
+    pub(crate) fn write_bytebuf(&mut self, buf: &ByteBuf) {
+        self.stream.write(buf.available_bytes());
     }
 
 
