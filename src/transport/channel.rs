@@ -55,18 +55,21 @@ impl Channel {
             stream,
             closed: false,
             eventloop,
-            outbound_context_pipe: None
+            outbound_context_pipe: None,
         }
     }
 
-
-    pub fn remote_addr(&self) -> Result<SocketAddr> {
+    pub(crate) fn remote_addr(&self) -> Result<SocketAddr> {
         self.stream.peer_addr()
     }
 
+    pub(crate) fn local_addr(&self) -> Result<SocketAddr> {
+        self.stream.local_addr()
+    }
 
     pub(crate) fn write_bytebuf(&mut self, buf: &ByteBuf) {
         self.stream.write(buf.available_bytes());
+        self.stream.flush();
     }
 
     ///
@@ -87,6 +90,7 @@ impl Channel {
             PollOpt::edge(),
         );
     }
+
     pub fn read(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
         self.stream.read_to_end(buf)
     }
@@ -98,5 +102,65 @@ impl Channel {
 
     pub fn is_closed(&self) -> bool {
         self.closed
+    }
+}
+
+///
+/// 暴露channel 用
+///
+pub struct InboundChannelCtx {
+    pub(crate) channel: Channel,
+}
+
+impl InboundChannelCtx {
+    pub(crate) fn new(channel: Channel) -> InboundChannelCtx {
+        InboundChannelCtx {
+            channel
+        }
+    }
+
+    pub(crate) fn write_and_flush(&mut self, message: &dyn Any) {
+        self.channel.write_and_flush(message);
+    }
+
+    pub fn remote_addr(&self) -> Result<SocketAddr> {
+        self.channel.remote_addr()
+    }
+
+    pub fn local_addr(&self) -> Result<SocketAddr> {
+        self.channel.local_addr()
+    }
+
+
+    pub fn is_active(&self) -> bool {
+        self.channel.is_closed()
+    }
+
+    pub fn close(&mut self) {
+        self.channel.close()
+    }
+}
+
+pub struct OutboundChannelCtx {
+    pub(crate) channel: Channel,
+}
+
+impl OutboundChannelCtx {
+    pub(crate) fn new(channel: Channel) -> OutboundChannelCtx {
+        OutboundChannelCtx {
+            channel
+        }
+    }
+
+    pub(crate) fn write_bytebuf(&mut self, buf: &ByteBuf) {
+        self.channel.write_bytebuf(buf);
+    }
+
+    pub fn remote_addr(&self) -> Result<SocketAddr> {
+        self.channel.remote_addr()
+    }
+
+    pub fn local_addr(&self) -> Result<SocketAddr> {
+        self.channel.local_addr()
     }
 }

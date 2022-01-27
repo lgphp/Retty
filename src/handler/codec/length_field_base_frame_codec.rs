@@ -15,6 +15,10 @@ impl ChannelInboundHandler for LengthFieldBaseFrameDecoder {
         todo!()
     }
 
+    fn channel_inactive(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
+        todo!()
+    }
+
     fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
         todo!()
     }

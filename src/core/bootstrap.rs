@@ -136,9 +136,9 @@ impl Bootstrap {
                     let outbound_ctx_pipe = Bootstrap::create_channel_outbound_ctx_pipe(channel_outbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
                     let mut channel_and_outpipe = channel.clone();
                     channel_and_outpipe.outbound_context_pipe = Some(Arc::new(Mutex::new(outbound_ctx_pipe)));
-                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel_and_outpipe);
+                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel_and_outpipe.clone());
 
-                    event_loop.clone().attach(ch_id, channel, inbound_ctx_pipe);
+                    event_loop.clone().attach(ch_id, channel_and_outpipe, inbound_ctx_pipe);
                     ch_id = Bootstrap::incr_id(ch_id);
                 }
             }

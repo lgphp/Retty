@@ -8,6 +8,7 @@ use crate::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutbo
 pub trait ChannelInboundHandler {
     fn id(&self) -> String;
     fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>);
+    fn channel_inactive(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>);
     fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any);
 }
 
@@ -29,8 +30,13 @@ impl ChannelInboundHandler for HeadHandler {
         let mut ctx = channel_handler_ctx.lock().unwrap();
         ctx.fire_channel_active();
     }
-    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
 
+    fn channel_inactive(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
+        let mut ctx = channel_handler_ctx.lock().unwrap();
+        ctx.fire_channel_inactive();
+    }
+
+    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
         let mut ctx = channel_handler_ctx.lock().unwrap();
         ctx.fire_channel_read(message);
     }

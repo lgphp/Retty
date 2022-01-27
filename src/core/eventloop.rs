@@ -9,7 +9,7 @@ use rayon_core::ThreadPool;
 use uuid::Uuid;
 
 use crate::handler::channel_handler_ctx_pipe::{ChannelInboundHandlerCtxPipe, ChannelOutboundHandlerCtxPipe};
-use crate::transport::channel::Channel;
+use crate::transport::channel::{Channel, InboundChannelCtx, OutboundChannelCtx};
 
 pub struct EventLoop {
     pub(crate) excutor: Arc<ThreadPool>,
@@ -44,6 +44,7 @@ impl EventLoop {
             ctx__inbound_ctx_pipe.head_channel_active();
         }
         self.channel_inbound_handler_ctx_pipe_map.insert_new(Token(id), ctx__inbound_ctx_pipe);
+
         self.channel_map.insert_new(Token(id), channel);
     }
 
@@ -65,8 +66,27 @@ impl EventLoop {
                         let mut all_buf = Vec::<u8>::new();
                         match ch.read(&mut buf) {
                             Ok(0) => {
-                                println!("close by remote peer.");
                                 ch.close();
+                                {
+                                    // 同步该channel所属pipeline 中的所有channel状态
+                                    let inbound_ctx_pipe_guard = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
+                                    for x in &inbound_ctx_pipe_guard.channel_handler_ctx_pipe {
+                                        let mut ctx = x.lock().unwrap();
+                                        {
+                                            let out_bound = ctx.channel_ctx.channel.outbound_context_pipe.as_ref().unwrap();
+                                            let out_bound_guard = out_bound.lock().unwrap();
+                                            for outctx_mutex in &out_bound_guard.channel_handler_ctx_pipe {
+                                                let mut out_ctx = outctx_mutex.lock().unwrap();
+                                                out_ctx.channel_ctx = OutboundChannelCtx::new(ch.clone());
+                                            }
+                                        }
+                                        ctx.channel_ctx = InboundChannelCtx::new(ch.clone());
+                                    }
+                                }
+                                {
+                                    let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
+                                    ctx_pipe.head_channel_inactive();
+                                }
                             }
                             Ok(n) => {}
                             Err(e) => {}
@@ -79,9 +99,7 @@ impl EventLoop {
                                 ctx_pipe.head_channel_read(&bytebuf);
                             }
                         }
-
                         if !ch.is_closed() {
-                            // 重置所有channnel
                             channel_map.insert_new(e.token(), ch);
                         }
                     }

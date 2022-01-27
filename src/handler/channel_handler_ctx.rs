@@ -7,7 +7,7 @@ use rayon_core::ThreadPool;
 use crate::core::eventloop::EventLoop;
 use crate::handler::channel_handler_ctx_pipe::{ChannelInboundHandlerCtxPipe, ChannelOutboundHandlerCtxPipe};
 use crate::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
-use crate::transport::channel::Channel;
+use crate::transport::channel::{Channel, InboundChannelCtx, OutboundChannelCtx};
 
 /**
 一个handlerctx 对应一个handler
@@ -17,7 +17,7 @@ use crate::transport::channel::Channel;
 pub struct ChannelInboundHandlerCtx {
     pub(crate) id: String,
     pub(crate) eventloop: Arc<EventLoop>,
-    pub channel: Channel,
+    pub(crate) channel_ctx: InboundChannelCtx,
     pub(crate) channel_handler_ctx_pipe: Option<ChannelInboundHandlerCtxPipe>,
     pub(crate) handler: Arc<Mutex<Box<dyn ChannelInboundHandler + Send + Sync>>>,
 
@@ -37,7 +37,7 @@ impl ChannelInboundHandlerCtx {
         ChannelInboundHandlerCtx {
             id,
             eventloop,
-            channel,
+            channel_ctx: InboundChannelCtx::new(channel),
             channel_handler_ctx_pipe: None,
             handler,
             next_ctx: None,
@@ -62,6 +62,15 @@ impl ChannelInboundHandlerCtx {
         }
     }
 
+    pub fn fire_channel_inactive(&mut self) {
+        if self.next_ctx.is_some() {
+            let next_ctx = self.next_ctx.as_ref().unwrap();
+            let next_ctx_clone = next_ctx.clone();
+            let next_handler_arc = self.next_handler.as_ref().unwrap();
+            let next_handler = next_handler_arc.lock().unwrap();
+            next_handler.channel_inactive(next_ctx_clone)
+        }
+    }
 
     pub fn fire_channel_read(&mut self, message: &dyn Any) {
         if self.next_ctx.is_some() {
@@ -74,27 +83,28 @@ impl ChannelInboundHandlerCtx {
     }
 
 
-
-
     pub(crate) fn channel_active(&mut self, ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
         let current_ctx = ctx.lock().unwrap();
         let next_handler = current_ctx.handler.lock().unwrap();
         next_handler.channel_active(ctx.clone());
     }
 
-    //
-    // pub fn write(&self, message: &dyn Any) {
-    //     let next_handler_arc = self.next_handler.as_ref().unwrap();
-    //     let next_handler_clone = next_handler_arc.clone();
-    //     let next_ctx_arc = self.next_ctx.as_ref().unwrap();
-    //     let next_ctx_clone = next_ctx_arc.clone();
-    //     let pipe = self.channel_handler_ctx_pipe.as_ref().unwrap();
-    //     pipe.channel_write(next_ctx_clone, next_handler_clone, message);
-    // }
 
-    pub fn channel(&mut self) -> &mut Channel {
-        let mut ch = &mut self.channel;
-        ch
+    pub fn write_and_flush(&mut self, message: &dyn Any) {
+        self.channel_ctx.write_and_flush(message);
+    }
+
+    pub fn channel(&mut self) -> &mut InboundChannelCtx {
+        let mut ch_ctx = &mut self.channel_ctx;
+        return ch_ctx;
+    }
+
+    pub fn close(&mut self) {
+        self.channel_ctx.close()
+    }
+
+    pub fn event_loop(&mut self) -> Arc<EventLoop> {
+        self.eventloop.clone()
     }
 }
 
@@ -105,7 +115,7 @@ impl ChannelInboundHandlerCtx {
 pub struct ChannelOutboundHandlerCtx {
     pub(crate) id: String,
     pub(crate) eventloop: Arc<EventLoop>,
-    pub(crate) channel: Channel,
+    pub(crate) channel_ctx: OutboundChannelCtx,
     pub(crate) channel_handler_ctx_pipe: Option<ChannelOutboundHandlerCtxPipe>,
     pub(crate) handler: Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>>,
 
@@ -128,7 +138,7 @@ impl ChannelOutboundHandlerCtx {
         ChannelOutboundHandlerCtx {
             id,
             eventloop,
-            channel,
+            channel_ctx: OutboundChannelCtx::new(channel),
             channel_handler_ctx_pipe: None,
             handler,
             next_ctx: None,
@@ -151,12 +161,16 @@ impl ChannelOutboundHandlerCtx {
         }
     }
 
-    pub fn channel(&mut self) -> &mut Channel {
-        let mut ch = &mut self.channel;
-        ch
+    pub fn channel(&mut self) -> &mut OutboundChannelCtx {
+        let mut ch_ctx = &mut self.channel_ctx;
+        return ch_ctx;
     }
 
     pub fn id(&self) -> String {
         return self.id.clone();
+    }
+
+    pub fn event_loop(&mut self) -> Arc<EventLoop> {
+        self.eventloop.clone()
     }
 }

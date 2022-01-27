@@ -41,6 +41,14 @@ impl ChannelInboundHandlerCtxPipe {
         head_handler.channel_active(ctx_head);
     }
 
+
+    pub(crate) fn head_channel_inactive(&self) {
+        let mut ctx_head = self.header_handler_ctx();
+        let head_handler_clone = self.header_handler().clone();
+        let head_handler = head_handler_clone.lock().unwrap();
+        head_handler.channel_inactive(ctx_head);
+    }
+
     // pub(crate) fn  channel_write(&self ,channel_handler_ctx : Arc<Mutex<ChannelHandlerCtx>> , hanlder:Arc<Mutex<Box<dyn ChannelHandler + Send + Sync>>> ,  message:&dyn Any){
     //     let handler_clone = hanlder.clone();
     //     let next_handler = handler_clone.lock().unwrap();
