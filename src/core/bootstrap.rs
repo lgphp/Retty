@@ -12,7 +12,7 @@ use mio::net::TcpListener;
 use uuid::Uuid;
 
 use crate::core::eventloop::{EventLoop, EventLoopGroup};
-use crate::handler::channel_handler_ctx::ChannelInboundHandlerCtx;
+use crate::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutboundHandlerCtx};
 use crate::handler::channel_handler_ctx_pipe::{ChannelInboundHandlerCtxPipe, ChannelOutboundHandlerCtxPipe};
 use crate::handler::handler::{ChannelOutboundHandler, HeadHandler, TailHandler};
 use crate::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
@@ -128,13 +128,17 @@ impl Bootstrap {
                         }
                     };
 
-                    let channel = Channel::create(Token(ch_id),
-                                                  event_loop.clone(),
-                                                  sock.try_clone().unwrap());
+                    let mut channel = Channel::create(Token(ch_id),
+                                                      event_loop.clone(),
+                                                      sock.try_clone().unwrap());
 
-                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
+
                     let outbound_ctx_pipe = Bootstrap::create_channel_outbound_ctx_pipe(channel_outbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
-                    event_loop.clone().attach(ch_id, channel.clone(), inbound_ctx_pipe, outbound_ctx_pipe);
+                    let mut channel_and_outpipe = channel.clone();
+                    channel_and_outpipe.outbound_context_pipe = Some(Arc::new(Mutex::new(outbound_ctx_pipe)));
+                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel_and_outpipe);
+
+                    event_loop.clone().attach(ch_id, channel, inbound_ctx_pipe);
                     ch_id = Bootstrap::incr_id(ch_id);
                 }
             }
@@ -162,7 +166,6 @@ impl Bootstrap {
         channel_handler_pipe.add_first(Box::new(HeadHandler::new()));
         // 创建ChannelHandlerCtxPipe
         let mut channel_handler_context_pipe = ChannelInboundHandlerCtxPipe::new();
-        // 将这个ch注册到eventloop上的selector上， 一个eventloop里有多个channel
         for _i in 0..channel_handler_pipe.handlers.len() {
             let handler = channel_handler_pipe.handlers.remove(0);
             let id = handler.id().clone();
@@ -180,14 +183,11 @@ impl Bootstrap {
         for _i in 0..ctx_pipe_len {
             let (_j, mut ctx) = enumerate.next().unwrap();
 
-            let prev_ctx = ctx.clone();
             let mut curr = ctx.lock().unwrap();
             curr.channel_handler_ctx_pipe = Some(channel_handler_context_pipe.clone());
             if _j == 0 {
                 curr.head_handler = None;
                 curr.head_ctx = None;
-                curr.prev_ctx = None;
-                curr.prev_handler = None;
             } else {
                 curr.head_handler = Some(head_handler.clone());
                 curr.head_ctx = Some(head_ctx.clone());
@@ -199,8 +199,6 @@ impl Bootstrap {
                     let mut next_ctx_guard = next_ctx.lock().unwrap();
                     curr.next_ctx = Some(next_ctx_clone);
                     curr.next_handler = Some(next_ctx_guard.handler.clone());
-                    next_ctx_guard.prev_ctx = Some(prev_ctx);
-                    next_ctx_guard.prev_handler = Some(curr.handler.clone())
                 }
                 None => {
                     curr.next_ctx = None;
@@ -211,21 +209,27 @@ impl Bootstrap {
         return channel_handler_context_pipe.clone();
     }
 
-
+    ///
+    /// 创建出站处理器pipeline
+    ///
     fn create_channel_outbound_ctx_pipe(out_channel_handler_pipe_fn: Arc<dyn Fn() -> ChannelOutboundHandlerPipe + Send + Sync>, event_loop: Arc<EventLoop>, channel: Channel) -> ChannelOutboundHandlerCtxPipe
     {
         // 创建ChannelHandlerPipe , 每一个连接创建自己的一套pipeline
         let mut channel_handler_pipe: ChannelOutboundHandlerPipe = (out_channel_handler_pipe_fn)();
-        //添加头handler
-        channel_handler_pipe.add_first(Box::new(HeadHandler::new()));
         // 创建ChannelHandlerCtxPipe
         let mut channel_handler_context_pipe = ChannelOutboundHandlerCtxPipe::new();
-        // 将这个ch注册到eventloop上的selector上， 一个eventloop里有多个channel
+        //将handler pipeline 反序
+        channel_handler_pipe.handlers.reverse();
+        ///
+        /// 添加TailHandler，追加到最后面
+        ///
+        channel_handler_pipe.add_last(Box::new(TailHandler::new()));
+
         for _i in 0..channel_handler_pipe.handlers.len() {
             let handler = channel_handler_pipe.handlers.remove(0);
             let id = handler.id().clone();
             let handler_arc = Arc::new(Mutex::new(handler));
-            let ctx = Arc::new(Mutex::new(ChannelInboundHandlerCtx::new(id, event_loop.clone(), channel.clone(), handler_arc.clone())));
+            let ctx = Arc::new(Mutex::new(ChannelOutboundHandlerCtx::new(id, event_loop.clone(), channel.clone(), handler_arc.clone())));
             channel_handler_context_pipe.add_last(ctx, handler_arc.clone());
         }
 
@@ -237,15 +241,11 @@ impl Bootstrap {
 
         for _i in 0..ctx_pipe_len {
             let (_j, mut ctx) = enumerate.next().unwrap();
-
-            let prev_ctx = ctx.clone();
             let mut curr = ctx.lock().unwrap();
             curr.channel_handler_ctx_pipe = Some(channel_handler_context_pipe.clone());
             if _j == 0 {
                 curr.head_handler = None;
                 curr.head_ctx = None;
-                curr.prev_ctx = None;
-                curr.prev_handler = None;
             } else {
                 curr.head_handler = Some(head_handler.clone());
                 curr.head_ctx = Some(head_ctx.clone());
@@ -257,8 +257,6 @@ impl Bootstrap {
                     let mut next_ctx_guard = next_ctx.lock().unwrap();
                     curr.next_ctx = Some(next_ctx_clone);
                     curr.next_handler = Some(next_ctx_guard.handler.clone());
-                    next_ctx_guard.prev_ctx = Some(prev_ctx);
-                    next_ctx_guard.prev_handler = Some(curr.handler.clone())
                 }
                 None => {
                     curr.next_ctx = None;

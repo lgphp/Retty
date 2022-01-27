@@ -30,6 +30,7 @@ impl ChannelInboundHandler for HeadHandler {
         ctx.fire_channel_active();
     }
     fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
+
         let mut ctx = channel_handler_ctx.lock().unwrap();
         ctx.fire_channel_read(message);
     }
@@ -51,16 +52,16 @@ impl ChannelOutboundHandler for TailHandler {
     }
 
     fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, message: &dyn Any) {
-        // let mut ctx = channel_handler_ctx.lock().unwrap();
-        // let bytes = message.downcast_ref::<ByteBuf>();
-        // match bytes {
-        //     Some(buf) =>{
-        //         ctx.channel().write_bytebuf(buf);
-        //     },
-        //     None=>{
-        //         println!("TailHandler message is not bytebuf");
-        //     }
-        // }
+        let mut ctx = channel_handler_ctx.lock().unwrap();
+        let bytes = message.downcast_ref::<ByteBuf>();
+        match bytes {
+            Some(buf) => {
+                ctx.channel().write_bytebuf(buf);
+            },
+            None => {
+                println!("TailHandler message is not bytebuf");
+            }
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::io::{Read, Result, Write};
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use bytebuf_rs::bytebuf::ByteBuf;
 use chashmap::CHashMap;
@@ -10,6 +10,7 @@ use mio::net::TcpStream;
 use rayon_core::ThreadPool;
 
 use crate::core::eventloop::EventLoop;
+use crate::handler::channel_handler_ctx_pipe::ChannelOutboundHandlerCtxPipe;
 
 #[derive(Clone)]
 pub enum ChannelOptions {
@@ -23,7 +24,10 @@ pub struct Channel {
     stream: TcpStream,
     closed: bool,
     eventloop: Arc<EventLoop>,
-
+    ///
+    /// 持有ChannelOutboundHandlerCtxPipe,用于写数据
+    ///
+    pub(crate) outbound_context_pipe: Option<Arc<Mutex<ChannelOutboundHandlerCtxPipe>>>,
 }
 
 
@@ -33,7 +37,8 @@ impl Clone for Channel {
             id: self.id.clone(),
             stream: self.stream.try_clone().unwrap(),
             closed: false,
-            eventloop: self.eventloop.clone()
+            eventloop: self.eventloop.clone(),
+            outbound_context_pipe: self.outbound_context_pipe.clone(),
         }
     }
 
@@ -50,6 +55,7 @@ impl Channel {
             stream,
             closed: false,
             eventloop,
+            outbound_context_pipe: None
         }
     }
 
@@ -59,15 +65,17 @@ impl Channel {
     }
 
 
-    // 从pipeline 最开始写
-    // pub fn write(&mut self, message: &dyn Any) {
-    //     println!("self.eventloop.channel_handler_ctx_pipe_map:size{}" , self.eventloop.channel_handler_ctx_pipe_map.len());
-    //     let pipe = self.eventloop.channel_handler_ctx_pipe_map.get(&self.id).unwrap();
-    //     pipe.head_channel_write(message);
-    // }
-
     pub(crate) fn write_bytebuf(&mut self, buf: &ByteBuf) {
         self.stream.write(buf.available_bytes());
+    }
+
+    ///
+    /// 从pipeline 最开始写
+    ///
+    pub fn write_and_flush(&self, message: &dyn Any) {
+        let pipe_arc = self.outbound_context_pipe.as_ref().unwrap();
+        let pipe = pipe_arc.lock().unwrap();
+        pipe.head_channel_write(message);
     }
 
 

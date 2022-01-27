@@ -16,7 +16,6 @@ pub struct EventLoop {
     pub(crate) selector: Arc<Poll>,
     pub(crate) channel_map: Arc<CHashMap<Token, Channel>>,
     pub(crate) channel_inbound_handler_ctx_pipe_map: Arc<CHashMap<Token, ChannelInboundHandlerCtxPipe>>,
-    pub(crate) channel_outbound_handler_ctx_pipe_map: Arc<CHashMap<Token, ChannelOutboundHandlerCtxPipe>>,
     pub(crate) stopped: Arc<AtomicBool>,
 }
 
@@ -31,13 +30,12 @@ impl EventLoop {
             selector: Arc::new(Poll::new().unwrap()),
             channel_map: Arc::new(CHashMap::new()),
             channel_inbound_handler_ctx_pipe_map: Arc::new(CHashMap::new()),
-            channel_outbound_handler_ctx_pipe_map: Arc::new(CHashMap::new()),
             stopped: Arc::new(AtomicBool::new(false)),
         }
     }
 
 
-    pub(crate) fn attach(&self, id: usize, ch: Channel, mut ctx__inbound_ctx_pipe: ChannelInboundHandlerCtxPipe, mut ctx__outbound_ctx_pipe: ChannelOutboundHandlerCtxPipe) {
+    pub(crate) fn attach(&self, id: usize, ch: Channel, mut ctx__inbound_ctx_pipe: ChannelInboundHandlerCtxPipe) {
         let mut channel = ch;
         // 一个channel注册一个selector
         channel.register(&self.selector);
@@ -45,10 +43,8 @@ impl EventLoop {
             // 注册成功后，执行有新客户端连接上来的回调
             ctx__inbound_ctx_pipe.head_channel_active();
         }
-
         self.channel_inbound_handler_ctx_pipe_map.insert_new(Token(id), ctx__inbound_ctx_pipe);
         self.channel_map.insert_new(Token(id), channel);
-
     }
 
 
@@ -85,6 +81,7 @@ impl EventLoop {
                         }
 
                         if !ch.is_closed() {
+                            // 重置所有channnel
                             channel_map.insert_new(e.token(), ch);
                         }
                     }

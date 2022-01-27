@@ -76,19 +76,25 @@ impl ChannelOutboundHandlerCtxPipe {
         }
     }
 
+    pub fn header_handler_ctx(&self) -> Arc<Mutex<ChannelOutboundHandlerCtx>> {
+        self.channel_handler_ctx_pipe.get(0).unwrap().clone()
+    }
+    pub fn header_handler(&self) -> Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>> {
+        self.channel_handler_pipe.get(0).unwrap().clone()
+    }
 
-    // pub(crate) fn  channel_write(&self ,channel_handler_ctx : Arc<Mutex<ChannelHandlerCtx>> , hanlder:Arc<Mutex<Box<dyn ChannelHandler + Send + Sync>>> ,  message:&dyn Any){
-    //     let handler_clone = hanlder.clone();
-    //     let next_handler = handler_clone.lock().unwrap();
-    //     next_handler.write(channel_handler_ctx.clone() , message);
-    // }
+    pub(crate) fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, hanlder: Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>>, message: &dyn Any) {
+        let handler_clone = hanlder.clone();
+        let next_handler = handler_clone.lock().unwrap();
+        next_handler.channel_write(channel_handler_ctx.clone(), message);
+    }
 
-    // pub(crate) fn head_channel_write(&self ,  msg :&dyn Any){
-    //     let mut ctx_head = self.header_handler_ctx();
-    //     let head_handler_clone = self.header_handler().clone();
-    //     let head_handler = head_handler_clone.lock().unwrap();
-    //     head_handler.write(ctx_head, msg);
-    // }
+    pub(crate) fn head_channel_write(&self, msg: &dyn Any) {
+        let mut ctx_head = self.header_handler_ctx();
+        let head_handler_clone = self.header_handler().clone();
+        let head_handler = head_handler_clone.lock().unwrap();
+        head_handler.channel_write(ctx_head, msg);
+    }
 
 
     pub(crate) fn add_last(&mut self, ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, handler: Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>>) {

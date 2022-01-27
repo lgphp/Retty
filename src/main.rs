@@ -32,6 +32,7 @@ impl ChannelInboundHandler for BizHandler {
     fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
         let mut ctx = channel_handler_ctx.lock().unwrap();
         println!("业务处理 Handler --> : channel_active 新连接上线: {}", ctx.channel().remote_addr().unwrap());
+        ctx.channel().write_and_flush(&"tttttt".to_string())
     }
 
     fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
@@ -65,6 +66,7 @@ impl ChannelInboundHandler for Decoder {
         let mut ctx = channel_handler_ctx.lock().unwrap();
         // 解码
         let obj = String::from_utf8_lossy(msg.available_bytes()).to_string();
+        ctx.channel().write_and_flush(&"1111111".to_string());
         ctx.fire_channel_read(&obj);
     }
 }
@@ -84,16 +86,16 @@ struct Encoder {
 
 impl ChannelOutboundHandler for Encoder {
     fn id(&self) -> String {
-        return "decoder_handler".to_string();
+        return "encoder_handler".to_string();
     }
 
 
     fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, message: &dyn Any) {
-        // let mut ctx = channel_handler_ctx.lock().unwrap();
-        // println!("编码");
-        // let msg = message.downcast_ref::<String>().unwrap();
-        // let buf = ByteBuf::new_from(msg.as_bytes());
-        // ctx.fire_channel_write(&buf);
+        let mut ctx = channel_handler_ctx.lock().unwrap();
+        println!("编码");
+        let msg = message.downcast_ref::<String>().unwrap();
+        let buf = ByteBuf::new_from(msg.as_bytes());
+        ctx.fire_channel_write(&buf);
     }
 }
 
