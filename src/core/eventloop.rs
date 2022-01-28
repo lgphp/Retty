@@ -33,7 +33,9 @@ impl EventLoop {
             stopped: Arc::new(AtomicBool::new(false)),
         }
     }
-
+    pub fn shutdown(&self) {
+        self.stopped.store(true, Ordering::Relaxed);
+    }
 
     pub(crate) fn attach(&self, id: usize, ch: Channel, mut ctx__inbound_ctx_pipe: ChannelInboundHandlerCtxPipe) {
         let mut channel = ch;

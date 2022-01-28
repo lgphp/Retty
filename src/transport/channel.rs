@@ -1,7 +1,9 @@
 use std::any::Any;
+use std::collections::HashMap;
 use std::io::{Read, Result, Write};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use bytebuf_rs::bytebuf::ByteBuf;
 use chashmap::CHashMap;
@@ -48,11 +50,65 @@ impl Clone for Channel {
 }
 
 impl Channel {
-    pub fn create(id: Token, eventloop: Arc<EventLoop>, stream: TcpStream,
+    pub fn create(id: Token, opts: HashMap<String, ChannelOptions>, eventloop: Arc<EventLoop>, stream: TcpStream,
     ) -> Channel {
+        let tcp_stream = stream.try_clone().unwrap();
+        for (k, ref v) in opts.iter() {
+            match k.as_ref() {
+                "ttl" => {
+                    match v {
+                        ChannelOptions::NUMBER(ttl) => {
+                            tcp_stream.set_ttl(*ttl as u32);
+                        }
+                        ChannelOptions::BOOL(_) => {}
+                    }
+                }
+                "linger" => {
+                    match v {
+                        ChannelOptions::NUMBER(linger) => {
+                            tcp_stream.set_linger(Some(Duration::from_millis(*linger as u64)));
+                        }
+                        ChannelOptions::BOOL(_) => {}
+                    }
+                }
+                "nodelay" => {
+                    match v {
+                        ChannelOptions::NUMBER(_) => {}
+                        ChannelOptions::BOOL(b) => {
+                            tcp_stream.set_nodelay(*b);
+                        }
+                    }
+                }
+                "keep_alive" => {
+                    match v {
+                        ChannelOptions::NUMBER(keepalive) => {
+                            tcp_stream.set_keepalive(Some(Duration::from_millis(*keepalive as u64)));
+                        }
+                        ChannelOptions::BOOL(_) => {}
+                    }
+                }
+                "recv_buf_size" => {
+                    match v {
+                        ChannelOptions::NUMBER(bufsize) => {
+                            tcp_stream.set_recv_buffer_size(*bufsize);
+                        }
+                        ChannelOptions::BOOL(_) => {}
+                    }
+                }
+                "send_buf_size" => {
+                    match v {
+                        ChannelOptions::NUMBER(bufsize) => {
+                            tcp_stream.set_send_buffer_size(*bufsize);
+                        }
+                        ChannelOptions::BOOL(_) => {}
+                    }
+                }
+                _ => {}
+            }
+        }
         Channel {
             id,
-            stream,
+            stream: tcp_stream,
             closed: false,
             eventloop,
             outbound_context_pipe: None,

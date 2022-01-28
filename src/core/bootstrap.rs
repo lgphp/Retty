@@ -66,6 +66,53 @@ impl Bootstrap {
         self
     }
 
+    /// set ttl in ms
+    pub fn opt_ttl_ms(&mut self, ttl: usize) -> &mut Self {
+        self.opts.insert("ttl".to_owned(), ChannelOptions::NUMBER(ttl));
+        self
+    }
+
+    /// set linger in ms
+    pub fn opt_linger_ms(&mut self, linger: usize) -> &mut Self {
+        self.opts.insert(
+            "linger".to_owned(),
+            ChannelOptions::NUMBER(linger),
+        );
+        self
+    }
+
+    /// set tcp nodelay
+    pub fn opt_nodelay(&mut self, nodelay: bool) -> &mut Self {
+        self.opts.insert(
+            "nodelay".to_owned(),
+            ChannelOptions::BOOL(nodelay),
+        );
+        self
+    }
+
+    pub fn opt_keep_alive_ms(&mut self, keep_alive: usize) -> &mut Self {
+        self.opts.insert(
+            "keep_alive".to_owned(),
+            ChannelOptions::NUMBER(keep_alive),
+        );
+        self
+    }
+
+    /// bind address and port
+    pub fn bind(&mut self, host: &str, port: u16) -> &mut Self {
+        self.host = host.to_owned();
+        self.port = port;
+        self
+    }
+
+    ///
+    pub fn terminate(&mut self) {
+        self.stopped.store(true, Ordering::Relaxed);
+        if let Some(ref group) = &self.worker_group {
+            group.event_loop_group().iter().for_each(|g| { g.shutdown(); });
+        }
+    }
+
 
     pub fn start(&self) {
         let boss_group = &self.boss_group;
@@ -129,6 +176,7 @@ impl Bootstrap {
                     };
 
                     let mut channel = Channel::create(Token(ch_id),
+                                                      opts.clone(),
                                                       event_loop.clone(),
                                                       sock.try_clone().unwrap());
 

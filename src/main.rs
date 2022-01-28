@@ -124,6 +124,8 @@ impl Encoder {
 fn main() {
     let mut bootstrap = Bootstrap::new_server_bootstrap();
     bootstrap.worker_group(8)
+        .bind("0.0.0.0", 1512)
+        .opt_ttl_ms(1000)
         .initialize_inbound_handler_pipeline(|| {
             let mut handler_pipe = ChannelInboundHandlerPipe::new();
             let decoder_handler = Box::new(Decoder::new());
