@@ -1,6 +1,10 @@
+use std::borrow::Borrow;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::thread;
+use std::thread::Thread;
+use std::time::Duration;
 
 use bytebuf_rs::bytebuf::ByteBuf;
 use chashmap::CHashMap;
@@ -109,10 +113,19 @@ impl EventLoop {
             }
         });
     }
+
+
+    pub fn schedule_delayed<F>(&self, task: F, delay_ms: usize)
+        where F: FnOnce() + Send + 'static {
+        thread::sleep(Duration::from_millis(delay_ms as u64));
+        self.excutor.spawn(task)
+    }
 }
 
 pub struct EventLoopGroup {
     group: Vec<Arc<EventLoop>>,
+    evenetloop_num: usize,
+    next: usize,
 }
 
 impl EventLoopGroup {
@@ -122,8 +135,27 @@ impl EventLoopGroup {
             _group.push(Arc::new(EventLoop::new()));
         }
         EventLoopGroup {
-            group: _group
+            group: _group,
+            evenetloop_num: n,
+            next: 0,
         }
+    }
+
+    pub fn new_default_event_loop(n: usize) -> EventLoopGroup {
+        EventLoopGroup::new(n)
+    }
+
+    pub fn next(&mut self) -> Option<Arc<EventLoop>> {
+        self.next = self.next + 1;
+        if self.next > self.evenetloop_num {
+            self.next = 0;
+        }
+        Some(self.group.get(self.next).unwrap().clone())
+    }
+
+    pub fn execute<F>(&mut self, task: F) where F: FnOnce() + Send + 'static {
+        let executor = self.next().unwrap();
+        executor.excutor.spawn(task);
     }
 
     pub fn event_loop_group(&self) -> &Vec<Arc<EventLoop>> {

@@ -8,6 +8,7 @@ use rayon_core::ThreadPool;
 use uuid::Uuid;
 
 use retty::core::bootstrap::Bootstrap;
+use retty::core::eventloop::EventLoopGroup;
 use retty::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutboundHandlerCtx};
 use retty::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
 use retty::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
@@ -138,8 +139,12 @@ fn main() {
         let encoder_handler = Box::new(Encoder::new());
         handler_pipe.add_last(encoder_handler);
         handler_pipe
-    })
+    }).start();
 
-        .start();
+    let mut new_default_event_loop = EventLoopGroup::new_default_event_loop(9);
+
+    new_default_event_loop.execute(|| {
+        println!("eventloop")
+    });
     WaitGroup::new().clone().wait();
 }
