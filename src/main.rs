@@ -142,7 +142,6 @@ fn main() {
     }).start();
 
     let mut new_default_event_loop = EventLoopGroup::new_default_event_loop(9);
-
     new_default_event_loop.execute(|| {
         println!("eventloop")
     });
