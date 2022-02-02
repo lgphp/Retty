@@ -78,7 +78,6 @@ impl ChannelInboundHandler for Decoder {
     fn channel_read(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, message: &mut dyn Any) {
         let mut buf = message.downcast_mut::<ByteBuf>().unwrap();
         println!("解码 Handler --> 收到Bytebuf:");
-        buf.print_bytes();
         // 解码
         let pkt_len = buf.read_u32_be();
         let ver = buf.read_u32_be();
@@ -114,7 +113,11 @@ impl ChannelOutboundHandler for Encoder {
     fn channel_write(&mut self, channel_handler_ctx: &mut ChannelOutboundHandlerCtx, message: &mut dyn Any) {
         let msg = message.downcast_ref::<String>().unwrap();
         println!("回执消息，编码器 ：====>Encoder Handler:{}", msg);
-        let mut buf = ByteBuf::new_from(msg.as_bytes());
+
+        let mut buf = ByteBuf::new_with_capacity(0);
+        let re = format!("回执消息，编码器 ：====>Encoder Handler:{}", msg);
+        buf.write_u32_be((1 + re.as_bytes().len()) as u32);
+        buf.write_string_with_u8_be_len(re);
         channel_handler_ctx.fire_channel_write(&mut buf);
     }
 }
