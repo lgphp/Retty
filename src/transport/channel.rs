@@ -26,6 +26,7 @@ pub struct Channel {
     stream: TcpStream,
     closed: bool,
     eventloop: Arc<EventLoop>,
+    attribute: Arc<Mutex<CHashMap<String, Box<dyn Any + Send + Sync>>>>,
     ///
     /// 持有ChannelOutboundHandlerCtxPipe,用于写数据
     ///
@@ -40,6 +41,7 @@ impl Clone for Channel {
             stream: self.stream.try_clone().unwrap(),
             closed: false,
             eventloop: self.eventloop.clone(),
+            attribute: self.attribute.clone(),
             outbound_context_pipe: self.outbound_context_pipe.clone(),
         }
     }
@@ -111,6 +113,7 @@ impl Channel {
             stream: tcp_stream,
             closed: false,
             eventloop,
+            attribute: Arc::new(Mutex::new(CHashMap::new())),
             outbound_context_pipe: None,
         }
     }
@@ -177,6 +180,12 @@ impl InboundChannelCtx {
 
     pub(crate) fn write_and_flush(&mut self, message: &mut dyn Any) {
         self.channel.write_and_flush(message);
+    }
+
+
+    pub fn attribute(&mut self) -> &mut CHashMap<String, Box<dyn Any + Send + Sync>> {
+        let mut attr = self.channel.attribute.lock().unwrap();
+        &mut *attr
     }
 
     pub fn remote_addr(&self) -> Result<SocketAddr> {

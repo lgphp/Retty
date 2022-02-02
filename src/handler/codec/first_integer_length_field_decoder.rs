@@ -63,7 +63,7 @@ impl ChannelInboundHandler for FirstIntegerLengthFieldDecoder {
                 }
                 channel_handler_ctx.fire_channel_read(&mut bytebuf);
                 if bytebuf.get_reader_index() == bytebuf.get_writer_index() {
-                    self.all_buf = Vec::new();
+                    self.all_buf = Vec::<u8>::new();
                     return;
                 }
             }
