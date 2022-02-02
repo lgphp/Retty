@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bytebuf_rs::bytebuf::ByteBuf;
-use chashmap::CHashMap;
+use chashmap::{CHashMap, ReadGuard};
 use mio::{Poll, PollOpt, Ready, Token};
 use mio::net::TcpStream;
 use mio::tcp::Shutdown;
@@ -27,6 +27,7 @@ pub struct Channel {
     stream: TcpStream,
     closed: bool,
     eventloop: Arc<EventLoop>,
+    attribute: CHashMap<String, Arc<Mutex<Box<dyn Any + Send + Sync>>>>
 
 }
 
@@ -38,6 +39,7 @@ impl Clone for Channel {
             stream: self.stream.try_clone().unwrap(),
             closed: self.closed,
             eventloop: self.eventloop.clone(),
+            attribute: self.attribute.clone()
         }
     }
 
@@ -108,6 +110,7 @@ impl Channel {
             stream: tcp_stream,
             closed: false,
             eventloop,
+            attribute: CHashMap::new()
         }
     }
 
@@ -162,6 +165,17 @@ impl InboundChannelCtx {
         InboundChannelCtx {
             channel
         }
+    }
+
+    pub fn set_attribute(&mut self, key: String, value: Box<dyn Any + Send + Sync>) {
+        let channel = self.channel.lock().unwrap();
+        channel.attribute.insert(key, Arc::new(Mutex::new(value)));
+    }
+
+    pub fn get_attribute(&self, key: String) -> Arc<Mutex<Box<dyn Any + Send + Sync>>> {
+        let channel = self.channel.lock().unwrap();
+        let v = channel.attribute.get_mut(key.as_str()).unwrap();
+        v.clone()
     }
 
     pub fn remote_addr(&self) -> Result<SocketAddr> {

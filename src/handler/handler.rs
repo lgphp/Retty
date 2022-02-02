@@ -29,6 +29,7 @@ impl ChannelInboundHandler for HeadHandler {
     }
 
     fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        channel_handler_ctx.channel().set_attribute("User".to_string(), Box::new("lgphp".to_string()));
         channel_handler_ctx.fire_channel_active();
     }
 

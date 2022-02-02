@@ -36,7 +36,11 @@ impl ChannelInboundHandler for BizHandler {
         // let mut ctx = channel_handler_ctx.lock().unwrap();
         let addr = channel_handler_ctx.channel().remote_addr().unwrap();
         println!("业务处理 Handler --> : channel_active 新连接上线: {}", addr);
-        channel_handler_ctx.write_and_flush(&mut format!("::: 欢迎你:==>{}", addr))
+        channel_handler_ctx.write_and_flush(&mut format!("::: 欢迎你:==>{}", addr));
+        let attr = channel_handler_ctx.channel().get_attribute("User".to_string());
+        let attr = attr.lock().unwrap();
+        let attr = attr.downcast_ref::<String>().unwrap();
+        println!("========================================================:att:::: {}", attr);
     }
 
     fn channel_inactive(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
@@ -49,7 +53,10 @@ impl ChannelInboundHandler for BizHandler {
         println!("业务处理 Handler  --> :收到消息:{}", msg);
         println!("reactor-excutor :{}", thread::current().name().unwrap());
         channel_handler_ctx.write_and_flush(&mut format!("::: I Love You !!!! :==>{}", msg));
-        println!("========================================================");
+        let attr = channel_handler_ctx.channel().get_attribute("User".to_string());
+        let attr = attr.lock().unwrap();
+        let attr = attr.downcast_ref::<String>().unwrap();
+        println!("========================================================:att:::: {}", attr);
     }
 
     fn channel_exception(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, error: RettyErrorKind) {
