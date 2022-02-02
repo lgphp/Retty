@@ -158,9 +158,9 @@ fn main() {
         handler_pipe
     }).start();
 
-    // let mut new_default_event_loop = EventLoopGroup::new_default_event_loop(9);
-    // new_default_event_loop.execute(|| {
-    //     println!("new_default_event_loop eventloop")
-    // });
+    let mut new_default_event_loop = EventLoopGroup::new_default_event_loop(9);
+    new_default_event_loop.execute(|| {
+        println!("new_default_event_loop eventloop execute Task")
+    });
     WaitGroup::new().clone().wait();
 }
