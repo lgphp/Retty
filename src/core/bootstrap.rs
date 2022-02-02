@@ -180,9 +180,8 @@ impl Bootstrap {
                                                   sock.try_clone().unwrap());
 
                     let channel = Arc::new(Mutex::new(channel));
-                    let channel_for_in = channel.clone();
                     let outbound_ctx_pipe = Bootstrap::create_channel_outbound_ctx_pipe(channel_outbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
-                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel_for_in.clone(), Arc::new(Mutex::new(outbound_ctx_pipe)));
+                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone(), Arc::new(Mutex::new(outbound_ctx_pipe)));
                     event_loop.clone().attach(ch_id, channel.clone(), inbound_ctx_pipe);
                     ch_id = Bootstrap::incr_id(ch_id);
                 }
