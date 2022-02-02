@@ -27,13 +27,19 @@ pub struct ChannelInboundHandlerCtx {
 
     pub(crate) head_handler: Option<Arc<Mutex<Box<dyn ChannelInboundHandler + Send + Sync>>>>,
     pub(crate) next_handler: Option<Arc<Mutex<Box<dyn ChannelInboundHandler + Send + Sync>>>>,
+
+    ///
+    /// 持有ChannelOutboundHandlerCtxPipe,用于写数据
+    ///
+    pub(crate) outbound_context_pipe: Option<Arc<Mutex<ChannelOutboundHandlerCtxPipe>>>,
 }
 
 impl ChannelInboundHandlerCtx {
     pub fn new(id: String,
                eventloop: Arc<EventLoop>,
-               channel: Channel,
+               channel: Arc<Mutex<Channel>>,
                handler: Arc<Mutex<Box<dyn ChannelInboundHandler + Send + Sync>>>,
+               outbound_context_pipe: Option<Arc<Mutex<ChannelOutboundHandlerCtxPipe>>>,
     ) -> ChannelInboundHandlerCtx {
         ChannelInboundHandlerCtx {
             id,
@@ -45,6 +51,7 @@ impl ChannelInboundHandlerCtx {
             next_handler: None,
             head_ctx: None,
             head_handler: None,
+            outbound_context_pipe
         }
     }
 
@@ -109,7 +116,13 @@ impl ChannelInboundHandlerCtx {
 
 
     pub fn write_and_flush(&mut self, message: &mut dyn Any) {
-        self.channel_ctx.write_and_flush(message);
+        if self.outbound_context_pipe.is_some() {
+            let pipe_arc = self.outbound_context_pipe.as_ref().unwrap();
+            let pipe = pipe_arc.lock().unwrap();
+            pipe.head_channel_write(message);
+        } else {
+            println!("self.outbound_context_pipe is None");
+        }
     }
 
     pub fn channel(&mut self) -> &mut InboundChannelCtx {
@@ -150,7 +163,7 @@ pub struct ChannelOutboundHandlerCtx {
 impl ChannelOutboundHandlerCtx {
     pub fn new(id: String,
                eventloop: Arc<EventLoop>,
-               channel: Channel,
+               channel: Arc<Mutex<Channel>>,
                handler: Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>>,
     ) -> ChannelOutboundHandlerCtx {
         ChannelOutboundHandlerCtx {

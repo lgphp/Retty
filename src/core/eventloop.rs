@@ -19,7 +19,7 @@ use crate::transport::channel::{Channel, InboundChannelCtx, OutboundChannelCtx};
 pub struct EventLoop {
     pub(crate) excutor: Arc<ThreadPool>,
     pub(crate) selector: Arc<Poll>,
-    pub(crate) channel_map: Arc<CHashMap<Token, Channel>>,
+    pub(crate) channel_map: Arc<CHashMap<Token, Arc<Mutex<Channel>>>>,
     pub(crate) channel_inbound_handler_ctx_pipe_map: Arc<CHashMap<Token, ChannelInboundHandlerCtxPipe>>,
     pub(crate) stopped: Arc<AtomicBool>,
 }
@@ -42,16 +42,20 @@ impl EventLoop {
         self.stopped.store(true, Ordering::Relaxed);
     }
 
-    pub(crate) fn attach(&self, id: usize, ch: Channel, mut ctx__inbound_ctx_pipe: ChannelInboundHandlerCtxPipe) {
-        let mut channel = ch;
+    pub(crate) fn attach(&self, id: usize, ch: Arc<Mutex<Channel>>, mut ctx__inbound_ctx_pipe: ChannelInboundHandlerCtxPipe) {
+        let channel = ch.clone();
+        let channel_2 = ch.clone();
         // 一个channel注册一个selector
-        channel.register(&self.selector);
+        {
+            let channel = channel.lock().unwrap();
+            channel.register(&self.selector);
+        }
         {
             ctx__inbound_ctx_pipe.head_channel_active();
         }
         self.channel_inbound_handler_ctx_pipe_map.insert_new(Token(id), ctx__inbound_ctx_pipe);
 
-        self.channel_map.insert_new(Token(id), channel);
+        self.channel_map.insert_new(Token(id), channel_2);
     }
 
 
@@ -67,44 +71,38 @@ impl EventLoop {
                 selector.poll(&mut events, None).unwrap();
 
                 for e in events.iter() {
-                    if let Some(mut ch) = channel_map.remove(&e.token()) {
-                        let mut buf: Vec<u8> = Vec::with_capacity(65535);
-                        match ch.read(&mut buf) {
-                            Ok(0) => {
-                                ch.close();
-                                {
-                                    // 同步该channel所属pipeline 中的所有channel状态
-                                    let inbound_ctx_pipe_guard = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
-                                    for x in &inbound_ctx_pipe_guard.channel_handler_ctx_pipe {
-                                        let mut ctx = x.lock().unwrap();
-                                        {
-                                            let out_bound = ctx.channel_ctx.channel.outbound_context_pipe.as_ref().unwrap();
-                                            let out_bound_guard = out_bound.lock().unwrap();
-                                            for outctx_mutex in &out_bound_guard.channel_handler_ctx_pipe {
-                                                let mut out_ctx = outctx_mutex.lock().unwrap();
-                                                out_ctx.channel_ctx = OutboundChannelCtx::new(ch.clone());
-                                            }
-                                        }
-                                        ctx.channel_ctx = InboundChannelCtx::new(ch.clone());
-                                    }
+                    let channel = match channel_map.remove(&e.token()) {
+                        Some(ch) => {
+                            let mut buf: Vec<u8> = Vec::with_capacity(65535);
+                            let ch_clone = ch.clone();
+                            let mut ch = ch.lock().unwrap();
+                            match ch.read(&mut buf) {
+                                Ok(0) => {
+                                    ch.close();
                                 }
-                                {
-                                    let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
-                                    ctx_pipe.head_channel_inactive();
-                                }
+                                Ok(n) => {}
+                                Err(_) => {}
                             }
-                            Ok(n) => {}
-                            Err(_) => {}
+                            if !ch.is_closed() {
+                                channel_map.insert_new(e.token(), ch_clone);
+                            }
+                            Some((ch.clone(), buf.clone()))
+                        }
+                        None => None
+                    };
+                    if let Some((ch, buf)) = channel {
+                        if ch.is_closed() {
+                            {
+                                let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
+                                ctx_pipe.head_channel_inactive();
+                            }
                         }
                         if !ch.is_closed() {
-                            let mut bytebuf = ByteBuf::new_from(&buf[..]);
                             {
+                                let mut bytebuf = ByteBuf::new_from(&buf[..]);
                                 let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
                                 ctx_pipe.head_channel_read(&mut bytebuf);
                             }
-                        }
-                        if !ch.is_closed() {
-                            channel_map.insert_new(e.token(), ch);
                         }
                     }
                 }

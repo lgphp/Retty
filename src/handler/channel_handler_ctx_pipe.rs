@@ -8,7 +8,7 @@ use crate::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
 use crate::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
 
 #[derive(Clone)]
-pub(crate) struct ChannelInboundHandlerCtxPipe {
+pub struct ChannelInboundHandlerCtxPipe {
     pub(crate) channel_handler_ctx_pipe: Vec<Arc<Mutex<ChannelInboundHandlerCtx>>>,
     pub(crate) channel_handler_pipe: Vec<Arc<Mutex<Box<dyn ChannelInboundHandler + Send + Sync>>>>,
 }
@@ -74,7 +74,7 @@ impl ChannelInboundHandlerCtxPipe {
 
 
 #[derive(Clone)]
-pub(crate) struct ChannelOutboundHandlerCtxPipe {
+pub struct ChannelOutboundHandlerCtxPipe {
     pub(crate) channel_handler_ctx_pipe: Vec<Arc<Mutex<ChannelOutboundHandlerCtx>>>,
     pub(crate) channel_handler_pipe: Vec<Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>>>,
 }
@@ -87,10 +87,10 @@ impl ChannelOutboundHandlerCtxPipe {
         }
     }
 
-    pub fn header_handler_ctx(&self) -> Arc<Mutex<ChannelOutboundHandlerCtx>> {
+    pub(crate) fn header_handler_ctx(&self) -> Arc<Mutex<ChannelOutboundHandlerCtx>> {
         self.channel_handler_ctx_pipe.get(0).unwrap().clone()
     }
-    pub fn header_handler(&self) -> Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>> {
+    pub(crate) fn header_handler(&self) -> Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>> {
         self.channel_handler_pipe.get(0).unwrap().clone()
     }
 

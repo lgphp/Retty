@@ -157,7 +157,6 @@ impl Bootstrap {
             //当服务器没有停的时候
             while !stopped.load(Ordering::Relaxed) {
                 let event_loop = work_group.event_loop_group()[ch_id % work_group.event_loop_group().len()].clone();
-                let curr_event_loop_executor = event_loop.clone().excutor.clone();
 
                 // 取出selector中的事件集合
                 match sel.poll(&mut events, None) {
@@ -175,18 +174,16 @@ impl Bootstrap {
                         }
                     };
 
-                    let mut channel = Channel::create(Token(ch_id),
-                                                      opts.clone(),
-                                                      event_loop.clone(),
-                                                      sock.try_clone().unwrap());
+                    let channel = Channel::create(Token(ch_id),
+                                                  opts.clone(),
+                                                  event_loop.clone(),
+                                                  sock.try_clone().unwrap());
 
-
+                    let channel = Arc::new(Mutex::new(channel));
+                    let channel_for_in = channel.clone();
                     let outbound_ctx_pipe = Bootstrap::create_channel_outbound_ctx_pipe(channel_outbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
-                    let mut channel_and_outpipe = channel.clone();
-                    channel_and_outpipe.outbound_context_pipe = Some(Arc::new(Mutex::new(outbound_ctx_pipe)));
-                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel_and_outpipe.clone());
-
-                    event_loop.clone().attach(ch_id, channel_and_outpipe, inbound_ctx_pipe);
+                    let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel_for_in.clone(), Arc::new(Mutex::new(outbound_ctx_pipe)));
+                    event_loop.clone().attach(ch_id, channel.clone(), inbound_ctx_pipe);
                     ch_id = Bootstrap::incr_id(ch_id);
                 }
             }
@@ -206,7 +203,7 @@ impl Bootstrap {
     ///
     /// 创建入站处理pipeline
     ///
-    fn create_channel_inbound_ctx_pipe(in_channel_handler_pipe_fn: Arc<dyn Fn() -> ChannelInboundHandlerPipe + Send + Sync>, event_loop: Arc<EventLoop>, channel: Channel) -> ChannelInboundHandlerCtxPipe
+    fn create_channel_inbound_ctx_pipe(in_channel_handler_pipe_fn: Arc<dyn Fn() -> ChannelInboundHandlerPipe + Send + Sync>, event_loop: Arc<EventLoop>, channel: Arc<Mutex<Channel>>, out_pipe: Arc<Mutex<ChannelOutboundHandlerCtxPipe>>) -> ChannelInboundHandlerCtxPipe
     {
         // 创建ChannelHandlerPipe , 每一个连接创建自己的一套pipeline
         let mut channel_handler_pipe: ChannelInboundHandlerPipe = (in_channel_handler_pipe_fn)();
@@ -218,7 +215,7 @@ impl Bootstrap {
             let handler = channel_handler_pipe.handlers.remove(0);
             let id = handler.id().clone();
             let handler_arc = Arc::new(Mutex::new(handler));
-            let ctx = Arc::new(Mutex::new(ChannelInboundHandlerCtx::new(id, event_loop.clone(), channel.clone(), handler_arc.clone())));
+            let ctx = Arc::new(Mutex::new(ChannelInboundHandlerCtx::new(id, event_loop.clone(), channel.clone(), handler_arc.clone(), Some(out_pipe.clone()))));
             channel_handler_context_pipe.add_last(ctx, handler_arc.clone());
         }
 
@@ -260,7 +257,7 @@ impl Bootstrap {
     ///
     /// 创建出站处理器pipeline
     ///
-    fn create_channel_outbound_ctx_pipe(out_channel_handler_pipe_fn: Arc<dyn Fn() -> ChannelOutboundHandlerPipe + Send + Sync>, event_loop: Arc<EventLoop>, channel: Channel) -> ChannelOutboundHandlerCtxPipe
+    fn create_channel_outbound_ctx_pipe(out_channel_handler_pipe_fn: Arc<dyn Fn() -> ChannelOutboundHandlerPipe + Send + Sync>, event_loop: Arc<EventLoop>, channel: Arc<Mutex<Channel>>) -> ChannelOutboundHandlerCtxPipe
     {
         // 创建ChannelHandlerPipe , 每一个连接创建自己的一套pipeline
         let mut channel_handler_pipe: ChannelOutboundHandlerPipe = (out_channel_handler_pipe_fn)();

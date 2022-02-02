@@ -113,7 +113,6 @@ impl ChannelOutboundHandler for Encoder {
     fn channel_write(&mut self, channel_handler_ctx: &mut ChannelOutboundHandlerCtx, message: &mut dyn Any) {
         let msg = message.downcast_ref::<String>().unwrap();
         println!("回执消息，编码器 ：====>Encoder Handler:{}", msg);
-
         let mut buf = ByteBuf::new_with_capacity(0);
         let re = format!("回执消息，编码器 ：====>Encoder Handler:{}", msg);
         buf.write_u32_be((1 + re.as_bytes().len()) as u32);
@@ -151,9 +150,9 @@ fn main() {
         handler_pipe
     }).start();
 
-    let mut new_default_event_loop = EventLoopGroup::new_default_event_loop(9);
-    new_default_event_loop.execute(|| {
-        println!("eventloop")
-    });
+    // let mut new_default_event_loop = EventLoopGroup::new_default_event_loop(9);
+    // new_default_event_loop.execute(|| {
+    //     println!("new_default_event_loop eventloop")
+    // });
     WaitGroup::new().clone().wait();
 }

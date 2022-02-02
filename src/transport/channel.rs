@@ -9,6 +9,7 @@ use bytebuf_rs::bytebuf::ByteBuf;
 use chashmap::CHashMap;
 use mio::{Poll, PollOpt, Ready, Token};
 use mio::net::TcpStream;
+use mio::tcp::Shutdown;
 use rayon_core::ThreadPool;
 
 use crate::core::eventloop::EventLoop;
@@ -26,10 +27,7 @@ pub struct Channel {
     stream: TcpStream,
     closed: bool,
     eventloop: Arc<EventLoop>,
-    ///
-    /// 持有ChannelOutboundHandlerCtxPipe,用于写数据
-    ///
-    pub(crate) outbound_context_pipe: Option<Arc<Mutex<ChannelOutboundHandlerCtxPipe>>>,
+
 }
 
 
@@ -38,9 +36,8 @@ impl Clone for Channel {
         Channel {
             id: self.id.clone(),
             stream: self.stream.try_clone().unwrap(),
-            closed: false,
+            closed: self.closed,
             eventloop: self.eventloop.clone(),
-            outbound_context_pipe: self.outbound_context_pipe.clone(),
         }
     }
 
@@ -111,7 +108,6 @@ impl Channel {
             stream: tcp_stream,
             closed: false,
             eventloop,
-            outbound_context_pipe: None,
         }
     }
 
@@ -128,14 +124,6 @@ impl Channel {
         self.stream.flush();
     }
 
-    ///
-    /// 从pipeline 最开始写
-    ///
-    pub fn write_and_flush(&self, message: &mut dyn Any) {
-        let pipe_arc = self.outbound_context_pipe.as_ref().unwrap();
-        let pipe = pipe_arc.lock().unwrap();
-        pipe.head_channel_write(message);
-    }
 
 
     pub fn register(&self, poll: &Poll) {
@@ -153,6 +141,7 @@ impl Channel {
 
 
     pub fn close(&mut self) {
+        self.stream.shutdown(Shutdown::Both);
         self.closed = true;
     }
 
@@ -165,59 +154,61 @@ impl Channel {
 /// 暴露channel 用
 ///
 pub struct InboundChannelCtx {
-    pub(crate) channel: Channel,
+    pub(crate) channel: Arc<Mutex<Channel>>,
 }
 
 impl InboundChannelCtx {
-    pub(crate) fn new(channel: Channel) -> InboundChannelCtx {
+    pub(crate) fn new(channel: Arc<Mutex<Channel>>) -> InboundChannelCtx {
         InboundChannelCtx {
             channel
         }
     }
 
-    pub(crate) fn write_and_flush(&mut self, message: &mut dyn Any) {
-        self.channel.write_and_flush(message);
-    }
-
-
     pub fn remote_addr(&self) -> Result<SocketAddr> {
-        self.channel.remote_addr()
+        let channel = self.channel.lock().unwrap();
+        channel.remote_addr()
     }
 
     pub fn local_addr(&self) -> Result<SocketAddr> {
-        self.channel.local_addr()
+        let channel = self.channel.lock().unwrap();
+        channel.local_addr()
     }
 
 
     pub fn is_active(&self) -> bool {
-        self.channel.is_closed()
+        let channel = self.channel.lock().unwrap();
+        channel.is_closed()
     }
 
     pub fn close(&mut self) {
-        self.channel.close()
+        let mut channel = self.channel.lock().unwrap();
+        channel.close()
     }
 }
 
 pub struct OutboundChannelCtx {
-    pub(crate) channel: Channel,
+    pub(crate) channel: Arc<Mutex<Channel>>,
 }
 
 impl OutboundChannelCtx {
-    pub(crate) fn new(channel: Channel) -> OutboundChannelCtx {
+    pub(crate) fn new(channel: Arc<Mutex<Channel>>) -> OutboundChannelCtx {
         OutboundChannelCtx {
             channel
         }
     }
 
     pub(crate) fn write_bytebuf(&mut self, buf: &ByteBuf) {
-        self.channel.write_bytebuf(buf);
+        let mut channel = self.channel.lock().unwrap();
+        channel.write_bytebuf(buf);
     }
 
     pub fn remote_addr(&self) -> Result<SocketAddr> {
-        self.channel.remote_addr()
+        let channel = self.channel.lock().unwrap();
+        channel.remote_addr()
     }
 
     pub fn local_addr(&self) -> Result<SocketAddr> {
-        self.channel.local_addr()
+        let channel = self.channel.lock().unwrap();
+        channel.local_addr()
     }
 }

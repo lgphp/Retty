@@ -62,6 +62,7 @@ impl ChannelOutboundHandler for TailHandler {
 
     fn channel_write(&mut self, channel_handler_ctx: &mut ChannelOutboundHandlerCtx, message: &mut dyn Any) {
         let bytes = message.downcast_ref::<ByteBuf>();
+
         match bytes {
             Some(buf) => {
                 channel_handler_ctx.channel().write_bytebuf(buf);
