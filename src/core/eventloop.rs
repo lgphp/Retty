@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::io::ErrorKind;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
@@ -76,21 +77,29 @@ impl EventLoop {
                             let mut buf: Vec<u8> = Vec::with_capacity(65535);
                             let ch_clone = ch.clone();
                             let mut ch = ch.lock().unwrap();
-                            match ch.read(&mut buf) {
+                            let ch_ret = match ch.read(&mut buf) {
                                 Ok(0) => {
                                     ch.close();
+                                    None
                                 }
-                                Ok(n) => {}
-                                Err(_) => {}
-                            }
+                                Ok(n) => {
+                                    None
+                                }
+                                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                                    None
+                                }
+                                Err(e) => {
+                                    Some(e)
+                                }
+                            };
                             if !ch.is_closed() {
                                 channel_map.insert_new(e.token(), ch_clone);
                             }
-                            Some((ch.clone(), buf.clone()))
+                            Some((ch.clone(), buf.clone(), ch_ret))
                         }
                         None => None
                     };
-                    if let Some((ch, buf)) = channel {
+                    if let Some((ch, buf, err)) = channel {
                         if ch.is_closed() {
                             {
                                 let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
@@ -98,7 +107,11 @@ impl EventLoop {
                             }
                         }
                         if !ch.is_closed() {
-                            {
+                            if err.is_some() {
+                                let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
+                                let error: RettyErrorKind = err.unwrap().into();
+                                ctx_pipe.head_channel_exception(error);
+                            } else {
                                 let mut bytebuf = ByteBuf::new_from(&buf[..]);
                                 let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
                                 ctx_pipe.head_channel_read(&mut bytebuf);
