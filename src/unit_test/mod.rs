@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
+use bytebuf_rs::bytebuf::ByteBuf;
 use crossbeam_utils::sync::WaitGroup;
 use rayon_core::ThreadPool;
 use uuid::Uuid;
@@ -32,6 +33,21 @@ pub fn test_mutex() {
     let a_obj = a.lock().unwrap();
     println!("1111");
     a_obj.print_s();
+}
+
+
+fn read(msg: &mut dyn Any) {
+    let mut option = msg.downcast_mut::<ByteBuf>().unwrap();
+    option.skip_index(2);
+}
+
+#[test]
+pub fn test_byte_buf() {
+    let mut buf = ByteBuf::new_with_capacity(10);
+
+    buf.write_u32_be(1);
+
+    read(&mut buf);
 }
 
 

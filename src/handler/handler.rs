@@ -3,19 +3,21 @@ use std::sync::{Arc, Mutex};
 
 use bytebuf_rs::bytebuf::ByteBuf;
 
+use crate::errors::RettyErrorKind;
 use crate::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutboundHandlerCtx};
 
 pub trait ChannelInboundHandler {
     fn id(&self) -> String;
-    fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>);
-    fn channel_inactive(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>);
-    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any);
+    fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx);
+    fn channel_inactive(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx);
+    fn channel_read(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, message: &mut dyn Any);
+    fn channel_exception(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, error: RettyErrorKind);
 }
 
 
 pub trait ChannelOutboundHandler {
     fn id(&self) -> String;
-    fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, message: &dyn Any);
+    fn channel_write(&mut self, channel_handler_ctx: &mut ChannelOutboundHandlerCtx, message: &mut dyn Any);
 }
 
 
@@ -26,19 +28,20 @@ impl ChannelInboundHandler for HeadHandler {
         return String::from("HEAD");
     }
 
-    fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        ctx.fire_channel_active();
+    fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        channel_handler_ctx.fire_channel_active();
     }
 
-    fn channel_inactive(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        ctx.fire_channel_inactive();
+    fn channel_inactive(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        channel_handler_ctx.fire_channel_inactive();
     }
 
-    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        ctx.fire_channel_read(message);
+    fn channel_read(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, message: &mut dyn Any) {
+        channel_handler_ctx.fire_channel_read(message);
+    }
+
+    fn channel_exception(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, error: RettyErrorKind) {
+        channel_handler_ctx.fire_channel_exception(error);
     }
 }
 
@@ -57,12 +60,11 @@ impl ChannelOutboundHandler for TailHandler {
         return String::from("TAIL");
     }
 
-    fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, message: &dyn Any) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
+    fn channel_write(&mut self, channel_handler_ctx: &mut ChannelOutboundHandlerCtx, message: &mut dyn Any) {
         let bytes = message.downcast_ref::<ByteBuf>();
         match bytes {
             Some(buf) => {
-                ctx.channel().write_bytebuf(buf);
+                channel_handler_ctx.channel().write_bytebuf(buf);
             },
             None => {
                 println!("TailHandler message is not bytebuf");

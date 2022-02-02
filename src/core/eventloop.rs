@@ -12,6 +12,7 @@ use mio::{Events, Poll, Token};
 use rayon_core::ThreadPool;
 use uuid::Uuid;
 
+use crate::errors::RettyErrorKind;
 use crate::handler::channel_handler_ctx_pipe::{ChannelInboundHandlerCtxPipe, ChannelOutboundHandlerCtxPipe};
 use crate::transport::channel::{Channel, InboundChannelCtx, OutboundChannelCtx};
 
@@ -46,7 +47,6 @@ impl EventLoop {
         // 一个channel注册一个selector
         channel.register(&self.selector);
         {
-            // 注册成功后，执行有新客户端连接上来的回调
             ctx__inbound_ctx_pipe.head_channel_active();
         }
         self.channel_inbound_handler_ctx_pipe_map.insert_new(Token(id), ctx__inbound_ctx_pipe);
@@ -68,8 +68,7 @@ impl EventLoop {
 
                 for e in events.iter() {
                     if let Some(mut ch) = channel_map.remove(&e.token()) {
-                        let mut buf: Vec<u8> = Vec::with_capacity(65536);
-                        let mut all_buf = Vec::<u8>::new();
+                        let mut buf: Vec<u8> = Vec::with_capacity(65535);
                         match ch.read(&mut buf) {
                             Ok(0) => {
                                 ch.close();
@@ -95,14 +94,13 @@ impl EventLoop {
                                 }
                             }
                             Ok(n) => {}
-                            Err(e) => {}
+                            Err(_) => {}
                         }
                         if !ch.is_closed() {
                             let mut bytebuf = ByteBuf::new_from(&buf[..]);
-                            println!("reactor-excutor :{}", thread::current().name().unwrap());
                             {
                                 let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
-                                ctx_pipe.head_channel_read(&bytebuf);
+                                ctx_pipe.head_channel_read(&mut bytebuf);
                             }
                         }
                         if !ch.is_closed() {

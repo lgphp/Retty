@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use rayon_core::ThreadPool;
 
 use crate::core::eventloop::EventLoop;
+use crate::errors::RettyErrorKind;
 use crate::handler::channel_handler_ctx_pipe::{ChannelInboundHandlerCtxPipe, ChannelOutboundHandlerCtxPipe};
 use crate::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
 use crate::transport::channel::{Channel, InboundChannelCtx, OutboundChannelCtx};
@@ -57,8 +58,9 @@ impl ChannelInboundHandlerCtx {
             let next_ctx = self.next_ctx.as_ref().unwrap();
             let next_ctx_clone = next_ctx.clone();
             let next_handler_arc = self.next_handler.as_ref().unwrap();
-            let next_handler = next_handler_arc.lock().unwrap();
-            next_handler.channel_active(next_ctx_clone)
+            let mut next_handler = next_handler_arc.lock().unwrap();
+            let mut next_ctx_clone_ref = next_ctx_clone.lock().unwrap();
+            next_handler.channel_active(&mut *next_ctx_clone_ref)
         }
     }
 
@@ -67,30 +69,46 @@ impl ChannelInboundHandlerCtx {
             let next_ctx = self.next_ctx.as_ref().unwrap();
             let next_ctx_clone = next_ctx.clone();
             let next_handler_arc = self.next_handler.as_ref().unwrap();
-            let next_handler = next_handler_arc.lock().unwrap();
-            next_handler.channel_inactive(next_ctx_clone)
+            let mut next_handler = next_handler_arc.lock().unwrap();
+            let mut next_ctx_clone_ref = next_ctx_clone.lock().unwrap();
+            next_handler.channel_inactive(&mut *next_ctx_clone_ref)
         }
     }
 
-    pub fn fire_channel_read(&mut self, message: &dyn Any) {
+    pub fn fire_channel_read(&mut self, message: &mut dyn Any) {
         if self.next_ctx.is_some() {
             let next_ctx = self.next_ctx.as_ref().unwrap();
             let next_ctx_clone = next_ctx.clone();
             let next_handler_arc = self.next_handler.as_ref().unwrap();
-            let next_handler = next_handler_arc.lock().unwrap();
-            next_handler.channel_read(next_ctx_clone, message)
+            let mut next_handler = next_handler_arc.lock().unwrap();
+            let mut next_ctx_clone_ref = next_ctx_clone.lock().unwrap();
+            next_handler.channel_read(&mut *next_ctx_clone_ref, message)
+        }
+    }
+
+
+    pub fn fire_channel_exception(&mut self, error: RettyErrorKind) {
+        if self.next_ctx.is_some() {
+            let next_ctx = self.next_ctx.as_ref().unwrap();
+            let next_ctx_clone = next_ctx.clone();
+            let next_handler_arc = self.next_handler.as_ref().unwrap();
+            let mut next_handler = next_handler_arc.lock().unwrap();
+            let mut next_ctx_clone_ref = next_ctx_clone.lock().unwrap();
+            next_handler.channel_exception(&mut *next_ctx_clone_ref, error)
         }
     }
 
 
     pub(crate) fn channel_active(&mut self, ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
         let current_ctx = ctx.lock().unwrap();
-        let next_handler = current_ctx.handler.lock().unwrap();
-        next_handler.channel_active(ctx.clone());
+        let mut next_handler = current_ctx.handler.lock().unwrap();
+        let ctx_ref_clone = ctx.clone();
+        let mut ctx_ref_clone_ref = ctx_ref_clone.lock().unwrap();
+        next_handler.channel_active(&mut *ctx_ref_clone_ref);
     }
 
 
-    pub fn write_and_flush(&mut self, message: &dyn Any) {
+    pub fn write_and_flush(&mut self, message: &mut dyn Any) {
         self.channel_ctx.write_and_flush(message);
     }
 
@@ -151,13 +169,14 @@ impl ChannelOutboundHandlerCtx {
     ///
     /// 从当前的ctx往下写
     ///
-    pub fn fire_channel_write(&mut self, message: &dyn Any) {
+    pub fn fire_channel_write(&mut self, message: &mut dyn Any) {
         if self.next_ctx.is_some() {
             let next_ctx = self.next_ctx.as_ref().unwrap();
             let next_ctx_clone = next_ctx.clone();
             let next_handler_arc = self.next_handler.as_ref().unwrap();
-            let next_handler = next_handler_arc.lock().unwrap();
-            next_handler.channel_write(next_ctx_clone, message)
+            let mut next_handler = next_handler_arc.lock().unwrap();
+            let mut next_ctx_clone_ref = next_ctx_clone.lock().unwrap();
+            next_handler.channel_write(&mut *next_ctx_clone_ref, message)
         }
     }
 

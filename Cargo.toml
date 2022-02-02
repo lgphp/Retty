@@ -9,10 +9,8 @@ edition = "2018"
 [dependencies]
 mio = "0.6.23"
 chashmap = "2.2.0"
-thiserror = "1.0"
-bytebuf-rs = { path = "/Users/lgphp/myapp/rustapp/bytebuf-rs" }
-chrono = "0.4.19"
-#threadpool = "1.0"
+bytebuf-rs = { git = "https://github.com/lgphp/bytebuf-rs" }
+#chrono = "0.4.19"
 rayon = "1.5"
 rayon-core = "1.9.1"
 crossbeam-utils = "0.8"

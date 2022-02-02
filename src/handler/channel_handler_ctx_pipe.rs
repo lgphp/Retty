@@ -2,6 +2,7 @@ use std::any::Any;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::errors::RettyErrorKind;
 use crate::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutboundHandlerCtx};
 use crate::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
 use crate::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
@@ -27,40 +28,42 @@ impl ChannelInboundHandlerCtxPipe {
         self.channel_handler_pipe.get(0).unwrap().clone()
     }
 
-    pub(crate) fn head_channel_read(&self, msg: &dyn Any) {
+    pub(crate) fn head_channel_read(&self, msg: &mut dyn Any) {
         let mut ctx_head = self.header_handler_ctx();
         let head_handler_clone = self.header_handler().clone();
-        let head_handler = head_handler_clone.lock().unwrap();
-        head_handler.channel_read(ctx_head, msg);
+        let mut head_handler = head_handler_clone.lock().unwrap();
+        let mut ctx_head_ref = ctx_head.lock().unwrap();
+        head_handler.channel_read(&mut ctx_head_ref, msg);
     }
 
     pub(crate) fn head_channel_active(&self) {
-        let mut ctx_head = self.header_handler_ctx();
-        let head_handler_clone = self.header_handler().clone();
-        let head_handler = head_handler_clone.lock().unwrap();
-        head_handler.channel_active(ctx_head);
+        let pipe = self.clone();
+        let mut ctx_head = pipe.header_handler_ctx();
+        let head_handler_clone = pipe.header_handler().clone();
+        let mut head_handler = head_handler_clone.lock().unwrap();
+        let mut ctx_head_ref = ctx_head.lock().unwrap();
+        head_handler.channel_active(&mut *ctx_head_ref);
+    }
+
+
+    pub(crate) fn head_channel_exception(&self, error: RettyErrorKind) {
+        let pipe = self.clone();
+        let mut ctx_head = pipe.header_handler_ctx();
+        let head_handler_clone = pipe.header_handler().clone();
+        let mut head_handler = head_handler_clone.lock().unwrap();
+        let mut ctx_head_ref = ctx_head.lock().unwrap();
+        head_handler.channel_exception(&mut *ctx_head_ref, error);
     }
 
 
     pub(crate) fn head_channel_inactive(&self) {
-        let mut ctx_head = self.header_handler_ctx();
-        let head_handler_clone = self.header_handler().clone();
-        let head_handler = head_handler_clone.lock().unwrap();
-        head_handler.channel_inactive(ctx_head);
+        let pipe = self.clone();
+        let mut ctx_head = pipe.header_handler_ctx();
+        let head_handler_clone = pipe.header_handler().clone();
+        let mut head_handler = head_handler_clone.lock().unwrap();
+        let mut ctx_head_ref = ctx_head.lock().unwrap();
+        head_handler.channel_inactive(&mut *ctx_head_ref);
     }
-
-    // pub(crate) fn  channel_write(&self ,channel_handler_ctx : Arc<Mutex<ChannelHandlerCtx>> , hanlder:Arc<Mutex<Box<dyn ChannelHandler + Send + Sync>>> ,  message:&dyn Any){
-    //     let handler_clone = hanlder.clone();
-    //     let next_handler = handler_clone.lock().unwrap();
-    //     next_handler.write(channel_handler_ctx.clone() , message);
-    // }
-
-    // pub(crate) fn head_channel_write(&self ,  msg :&dyn Any){
-    //     let mut ctx_head = self.header_handler_ctx();
-    //     let head_handler_clone = self.header_handler().clone();
-    //     let head_handler = head_handler_clone.lock().unwrap();
-    //     head_handler.write(ctx_head, msg);
-    // }
 
 
     pub(crate) fn add_last(&mut self, ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, handler: Arc<Mutex<Box<dyn ChannelInboundHandler + Send + Sync>>>) {
@@ -91,17 +94,14 @@ impl ChannelOutboundHandlerCtxPipe {
         self.channel_handler_pipe.get(0).unwrap().clone()
     }
 
-    pub(crate) fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, hanlder: Arc<Mutex<Box<dyn ChannelOutboundHandler + Send + Sync>>>, message: &dyn Any) {
-        let handler_clone = hanlder.clone();
-        let next_handler = handler_clone.lock().unwrap();
-        next_handler.channel_write(channel_handler_ctx.clone(), message);
-    }
 
-    pub(crate) fn head_channel_write(&self, msg: &dyn Any) {
-        let mut ctx_head = self.header_handler_ctx();
-        let head_handler_clone = self.header_handler().clone();
-        let head_handler = head_handler_clone.lock().unwrap();
-        head_handler.channel_write(ctx_head, msg);
+    pub(crate) fn head_channel_write(&self, msg: &mut dyn Any) {
+        let pipe = self.clone();
+        let ctx_head = pipe.header_handler_ctx();
+        let head_handler_clone = pipe.header_handler().clone();
+        let mut head_handler = head_handler_clone.lock().unwrap();
+        let mut ctx_head_ref = ctx_head.lock().unwrap();
+        head_handler.channel_write(&mut *ctx_head_ref, msg);
     }
 
 

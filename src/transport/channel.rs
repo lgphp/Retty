@@ -131,7 +131,7 @@ impl Channel {
     ///
     /// 从pipeline 最开始写
     ///
-    pub fn write_and_flush(&self, message: &dyn Any) {
+    pub fn write_and_flush(&self, message: &mut dyn Any) {
         let pipe_arc = self.outbound_context_pipe.as_ref().unwrap();
         let pipe = pipe_arc.lock().unwrap();
         pipe.head_channel_write(message);
@@ -175,7 +175,7 @@ impl InboundChannelCtx {
         }
     }
 
-    pub(crate) fn write_and_flush(&mut self, message: &dyn Any) {
+    pub(crate) fn write_and_flush(&mut self, message: &mut dyn Any) {
         self.channel.write_and_flush(message);
     }
 

@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use retty::core::bootstrap::Bootstrap;
 use retty::core::eventloop::EventLoopGroup;
+use retty::errors::RettyErrorKind;
 use retty::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutboundHandlerCtx};
+use retty::handler::codec::first_integer_length_field_decoder::FirstIntegerLengthFieldDecoder;
 use retty::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
 use retty::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
 
@@ -30,25 +32,27 @@ impl ChannelInboundHandler for BizHandler {
         return "biz_handler".to_string();
     }
 
-    fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        let addr = ctx.channel().remote_addr().unwrap();
+    fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        // let mut ctx = channel_handler_ctx.lock().unwrap();
+        let addr = channel_handler_ctx.channel().remote_addr().unwrap();
         println!("业务处理 Handler --> : channel_active 新连接上线: {}", addr);
-        ctx.write_and_flush(&format!("::: 欢迎你:==>{}", addr))
+        channel_handler_ctx.write_and_flush(&mut format!("::: 欢迎你:==>{}", addr))
     }
 
-    fn channel_inactive(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        println!("远端断开连接： Inactive: remote_addr: {}", ctx.channel().remote_addr().unwrap())
+    fn channel_inactive(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        println!("远端断开连接： Inactive: remote_addr: {}", channel_handler_ctx.channel().remote_addr().unwrap())
     }
 
-    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
+    fn channel_read(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, message: &mut dyn Any) {
         let msg = message.downcast_ref::<String>().unwrap();
         println!("业务处理 Handler  --> :收到消息:{}", msg);
         println!("reactor-excutor :{}", thread::current().name().unwrap());
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        ctx.write_and_flush(&format!("::: I Love You !!!! :==>{}", msg));
+        channel_handler_ctx.write_and_flush(&mut format!("::: I Love You !!!! :==>{}", msg));
         println!("========================================================");
+    }
+
+    fn channel_exception(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, error: RettyErrorKind) {
+        println!("ssss: {}", error.message);
     }
 }
 
@@ -62,25 +66,29 @@ impl ChannelInboundHandler for Decoder {
         return "encoder_handler".to_string();
     }
 
-    fn channel_active(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        println!("解码 Handler --> : channel_active 新连接上线: {}", ctx.channel().remote_addr().unwrap());
-        ctx.fire_channel_active();
+    fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        println!("解码 Handler --> : channel_active 新连接上线: {}", channel_handler_ctx.channel().remote_addr().unwrap());
+        channel_handler_ctx.fire_channel_active();
     }
 
-    fn channel_inactive(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-        ctx.fire_channel_inactive()
+    fn channel_inactive(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        channel_handler_ctx.fire_channel_inactive()
     }
 
-    fn channel_read(&self, channel_handler_ctx: Arc<Mutex<ChannelInboundHandlerCtx>>, message: &dyn Any) {
-        let msg = message.downcast_ref::<ByteBuf>().unwrap();
+    fn channel_read(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, message: &mut dyn Any) {
+        let mut buf = message.downcast_mut::<ByteBuf>().unwrap();
         println!("解码 Handler --> 收到Bytebuf:");
-        msg.print_bytes();
-        let mut ctx = channel_handler_ctx.lock().unwrap();
+        buf.print_bytes();
         // 解码
-        let obj = String::from_utf8_lossy(msg.available_bytes()).to_string();
-        ctx.fire_channel_read(&obj);
+        let pkt_len = buf.read_u32_be();
+        let ver = buf.read_u32_be();
+        let mut msg = buf.read_string_with_u8_be_len();
+        channel_handler_ctx.fire_channel_read(&mut msg);
+    }
+
+    fn channel_exception(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, error: RettyErrorKind) {
+        // let mut ctx = channel_handler_ctx.lock().unwrap();
+        channel_handler_ctx.fire_channel_exception(error);
     }
 }
 
@@ -103,13 +111,11 @@ impl ChannelOutboundHandler for Encoder {
     }
 
 
-    fn channel_write(&self, channel_handler_ctx: Arc<Mutex<ChannelOutboundHandlerCtx>>, message: &dyn Any) {
-        let mut ctx = channel_handler_ctx.lock().unwrap();
-
+    fn channel_write(&mut self, channel_handler_ctx: &mut ChannelOutboundHandlerCtx, message: &mut dyn Any) {
         let msg = message.downcast_ref::<String>().unwrap();
         println!("回执消息，编码器 ：====>Encoder Handler:{}", msg);
-        let buf = ByteBuf::new_from(msg.as_bytes());
-        ctx.fire_channel_write(&buf);
+        let mut buf = ByteBuf::new_from(msg.as_bytes());
+        channel_handler_ctx.fire_channel_write(&mut buf);
     }
 }
 
@@ -131,6 +137,7 @@ fn main() {
             let mut handler_pipe = ChannelInboundHandlerPipe::new();
             let decoder_handler = Box::new(Decoder::new());
             let biz_handler = Box::new(BizHandler::new());
+            handler_pipe.add_last(Box::new(FirstIntegerLengthFieldDecoder::new()));
             handler_pipe.add_last(decoder_handler);
             handler_pipe.add_last(biz_handler);
             handler_pipe
