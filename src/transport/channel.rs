@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::collections::HashMap;
 use std::io::{Read, Result, Write};
+use std::net::Shutdown;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -9,7 +10,6 @@ use bytebuf_rs::bytebuf::ByteBuf;
 use chashmap::{CHashMap, ReadGuard};
 use mio::{Poll, PollOpt, Ready, Token};
 use mio::net::TcpStream;
-use mio::tcp::Shutdown;
 use rayon_core::ThreadPool;
 
 use crate::core::eventloop::EventLoop;
