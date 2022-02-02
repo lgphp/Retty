@@ -108,7 +108,7 @@ struct Decoder {
 
 impl ChannelInboundHandler for Decoder {
     fn id(&self) -> String {
-        return "encoder_handler".to_string();
+        return "decoder_handler".to_string();
     }
 
     fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
