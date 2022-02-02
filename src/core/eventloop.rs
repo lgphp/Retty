@@ -69,7 +69,7 @@ impl EventLoop {
         self.excutor.spawn(move || {
             let mut events = Events::with_capacity(1024);
             while !stopped.load(Ordering::Relaxed) {
-                selector.poll(&mut events, None).unwrap();
+                selector.poll(&mut events, Some(Duration::from_millis(200))).unwrap();
 
                 for e in events.iter() {
                     let channel = match channel_map.remove(&e.token()) {

@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::time::Duration;
 
 use chashmap::CHashMap;
 use mio::{Events, Poll, PollOpt, Ready, Token};
@@ -148,10 +149,10 @@ impl Bootstrap {
         let channel_outbound_handler_pipe_fn = &self.channel_outbound_handler_pipe_fn.as_ref().unwrap();
         let channel_outbound_handler_pipe_fn = Arc::clone(channel_outbound_handler_pipe_fn);
 
-
         boss_g.excutor.spawn(move || {
             let mut events = Events::with_capacity(1024);
             let mut ch_id: usize = 1;
+
             let mut listener = match TcpListener::bind(&sock_addr) {
                 Ok(s) => {
                     println!("[High performance I/O framework written by Rust inspired by Netty]");
@@ -163,6 +164,7 @@ impl Bootstrap {
                     panic!("server is not started:{:?}", e)
                 }
             };
+
             let mut sel = Poll::new().unwrap();
             // 将监听器绑定在selector上 , 打上Token(0)的标记，注册read事件, 也就是只监听Tcplistener的事件，后面是监听TcpStream的事件
             sel.register(&mut listener, Token(0), Ready::readable(), PollOpt::edge())
@@ -174,7 +176,7 @@ impl Bootstrap {
                 let event_loop = work_group.event_loop_group()[ch_id % work_group.event_loop_group().len()].clone();
 
                 // 取出selector中的事件集合
-                match sel.poll(&mut events, None) {
+                match sel.poll(&mut events, Some(Duration::from_millis(200))) {
                     Ok(_) => {}
                     Err(_) => {
                         continue;
