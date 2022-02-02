@@ -33,7 +33,6 @@ impl ChannelInboundHandler for BizHandler {
     }
 
     fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
-        // let mut ctx = channel_handler_ctx.lock().unwrap();
         let addr = channel_handler_ctx.channel().remote_addr().unwrap();
         println!("业务处理 Handler --> : channel_active 新连接上线: {}", addr);
         channel_handler_ctx.write_and_flush(&mut format!("::: 欢迎你:==>{}", addr));
@@ -75,6 +74,8 @@ impl ChannelInboundHandler for Decoder {
     }
 
     fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        // set attribute
+        channel_handler_ctx.channel().set_attribute("User".to_string(), Box::new("lgphp".to_string()));
         println!("解码 Handler --> : channel_active 新连接上线: {}", channel_handler_ctx.channel().remote_addr().unwrap());
         channel_handler_ctx.fire_channel_active();
     }
@@ -143,6 +144,8 @@ fn main() {
     bootstrap.worker_group(8)
         .bind("0.0.0.0", 1512)
         .opt_ttl_ms(1000)
+        .opt_keep_alive_ms(30000)
+        .opt_nodelay(false)
         .initialize_inbound_handler_pipeline(|| {
             let mut handler_pipe = ChannelInboundHandlerPipe::new();
             let decoder_handler = Box::new(Decoder::new());
@@ -151,12 +154,13 @@ fn main() {
             handler_pipe.add_last(decoder_handler);
             handler_pipe.add_last(biz_handler);
             handler_pipe
-        }).initialize_outbound_handler_pipeline(|| {
-        let mut handler_pipe = ChannelOutboundHandlerPipe::new();
-        let encoder_handler = Box::new(Encoder::new());
-        handler_pipe.add_last(encoder_handler);
-        handler_pipe
-    }).start();
+        })
+        .initialize_outbound_handler_pipeline(|| {
+            let mut handler_pipe = ChannelOutboundHandlerPipe::new();
+            let encoder_handler = Box::new(Encoder::new());
+            handler_pipe.add_last(encoder_handler);
+            handler_pipe
+        }).start();
 
     let mut new_default_event_loop = EventLoopGroup::new_default_event_loop(9);
     new_default_event_loop.execute(|| {
