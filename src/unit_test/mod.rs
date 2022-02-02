@@ -50,4 +50,23 @@ pub fn test_byte_buf() {
     read(&mut buf);
 }
 
+pub struct Ch {
+    id: i8,
+}
+
+#[test]
+pub fn test_ref() {
+    let ch = Ch {
+        id: 9i8
+    };
+    let ch = Arc::new(Mutex::new(ch));
+    let ch1 = ch.clone();
+    let ch2 = ch.clone();
+    {
+        let mut guard = ch1.lock().unwrap();
+        guard.id = 8i8;
+    }
+    let mut guard_ch = ch2.lock().unwrap();
+    println!("ch2: {:?}", guard_ch.id);
+}
 
