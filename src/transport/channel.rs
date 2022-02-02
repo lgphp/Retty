@@ -174,7 +174,7 @@ impl InboundChannelCtx {
 
     pub fn get_attribute(&self, key: String) -> Arc<Mutex<Box<dyn Any + Send + Sync>>> {
         let channel = self.channel.lock().unwrap();
-        let v = channel.attribute.get_mut(key.as_str()).unwrap();
+        let v = channel.attribute.get(key.as_str()).unwrap();
         v.clone()
     }
 
