@@ -186,6 +186,8 @@ fn main() {
         .opt_ttl_ms(1000)
         .opt_keep_alive_ms(30000)
         .opt_nodelay(false)
+        .opt_send_buf_size(65535)
+        .opt_recv_buf_size(65535)
         .initialize_inbound_handler_pipeline(|| {
             let mut handler_pipe = ChannelInboundHandlerPipe::new();
             let decoder_handler = Box::new(Decoder::new());
