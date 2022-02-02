@@ -40,6 +40,7 @@ impl ChannelInboundHandler for BizHandler {
     }
 
     fn channel_inactive(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        println!("is_active:{}", channel_handler_ctx.channel().is_active());
         println!("远端断开连接： Inactive: remote_addr: {}", channel_handler_ctx.channel().remote_addr().unwrap())
     }
 

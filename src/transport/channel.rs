@@ -177,7 +177,7 @@ impl InboundChannelCtx {
 
     pub fn is_active(&self) -> bool {
         let channel = self.channel.lock().unwrap();
-        channel.is_closed()
+        !channel.is_closed()
     }
 
     pub fn close(&mut self) {
@@ -210,5 +210,10 @@ impl OutboundChannelCtx {
     pub fn local_addr(&self) -> Result<SocketAddr> {
         let channel = self.channel.lock().unwrap();
         channel.local_addr()
+    }
+
+    pub fn is_active(&self) -> bool {
+        let channel = self.channel.lock().unwrap();
+        !channel.is_closed()
     }
 }
