@@ -98,6 +98,21 @@ impl Bootstrap {
         self
     }
 
+    pub fn opt_recv_buf_size(&mut self, buf_size: usize) -> &mut Self {
+        self.opts.insert(
+            "recv_buf_size".to_owned(),
+            ChannelOptions::NUMBER(buf_size),
+        );
+        self
+    }
+
+    pub fn opt_send_buf_size(&mut self, buf_size: usize) -> &mut Self {
+        self.opts.insert(
+            "send_buf_size".to_owned(),
+            ChannelOptions::NUMBER(buf_size),
+        );
+        self
+    }
     /// bind address and port
     pub fn bind(&mut self, host: &str, port: u16) -> &mut Self {
         self.host = host.to_owned();
@@ -178,7 +193,6 @@ impl Bootstrap {
                                                   opts.clone(),
                                                   event_loop.clone(),
                                                   sock.try_clone().unwrap());
-
                     let channel = Arc::new(Mutex::new(channel));
                     let outbound_ctx_pipe = Bootstrap::create_channel_outbound_ctx_pipe(channel_outbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone());
                     let inbound_ctx_pipe = Bootstrap::create_channel_inbound_ctx_pipe(channel_inbound_handler_pipe_fn.clone(), event_loop.clone(), channel.clone(), Arc::new(Mutex::new(outbound_ctx_pipe)));
