@@ -17,10 +17,6 @@ impl Display for RettyErrorKind {
 
 impl Error for RettyErrorKind {}
 
-pub enum RettyError {
-    ConnectError(RettyErrorKind),
-}
-
 impl From<ioError> for RettyErrorKind {
     fn from(e: ioError) -> Self {
         let err = RettyErrorKind {

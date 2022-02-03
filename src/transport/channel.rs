@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use bytebuf_rs::bytebuf::ByteBuf;
 use chashmap::{CHashMap, ReadGuard};
+use crossbeam::channel::{bounded, Receiver, select, Sender, tick};
 use mio::{Poll, PollOpt, Ready, Token};
 use mio::net::TcpStream;
 use rayon_core::ThreadPool;
@@ -27,7 +28,10 @@ pub struct Channel {
     stream: TcpStream,
     closed: bool,
     eventloop: Arc<EventLoop>,
-    attribute: CHashMap<String, Arc<Mutex<Box<dyn Any + Send + Sync>>>>
+    attribute: CHashMap<String, Arc<Mutex<Box<dyn Any + Send + Sync>>>>,
+    inner_ch: (Sender<bool>, Receiver<bool>),
+    last_read_time_ms: u64,
+    read_idle_timeout_ms: u64,
 
 }
 
@@ -37,9 +41,12 @@ impl Clone for Channel {
         Channel {
             id: self.id.clone(),
             stream: self.stream.try_clone().unwrap(),
-            closed: self.closed,
+            closed: self.closed.clone(),
             eventloop: self.eventloop.clone(),
-            attribute: self.attribute.clone()
+            attribute: self.attribute.clone(),
+            inner_ch: self.inner_ch.clone(),
+            last_read_time_ms: self.last_read_time_ms,
+            read_idle_timeout_ms: self.read_idle_timeout_ms.clone(),
         }
     }
 
@@ -52,8 +59,17 @@ impl Channel {
     pub fn create(id: Token, opts: HashMap<String, ChannelOptions>, eventloop: Arc<EventLoop>, stream: TcpStream,
     ) -> Channel {
         let tcp_stream = stream.try_clone().unwrap();
+        let mut read_idle_timeout_ms = 50000u64;// 50 secs
         for (k, ref v) in opts.iter() {
             match k.as_ref() {
+                "read_idle_timeout_ms" => {
+                    match v {
+                        ChannelOptions::NUMBER(read_idle_timeout) => {
+                            read_idle_timeout_ms = (*read_idle_timeout as u64);
+                        }
+                        ChannelOptions::BOOL(_) => {}
+                    }
+                }
                 "ttl" => {
                     match v {
                         ChannelOptions::NUMBER(ttl) => {
@@ -110,7 +126,10 @@ impl Channel {
             stream: tcp_stream,
             closed: false,
             eventloop,
-            attribute: CHashMap::new()
+            attribute: CHashMap::new(),
+            inner_ch: bounded(1024),
+            last_read_time_ms: 0,
+            read_idle_timeout_ms: read_idle_timeout_ms.clone(),
         }
     }
 
@@ -127,7 +146,17 @@ impl Channel {
         self.stream.flush();
     }
 
+    pub(crate) fn set_last_read_time(&mut self, ms: u64) {
+        self.last_read_time_ms = ms;
+    }
 
+    pub(crate) fn last_read_time_ms(&self) -> u64 {
+        self.last_read_time_ms
+    }
+
+    pub(crate) fn read_idle_timeout_ms(&self) -> u64 {
+        self.read_idle_timeout_ms
+    }
 
     pub fn register(&self, poll: &Poll) {
         poll.register(
@@ -167,6 +196,10 @@ impl InboundChannelCtx {
         }
     }
 
+    pub fn id(&self) -> String {
+        let channel = self.channel.lock().unwrap();
+        format!("{}", channel.id.0).clone()
+    }
     pub fn set_attribute(&mut self, key: String, value: Box<dyn Any + Send + Sync>) {
         let channel = self.channel.lock().unwrap();
         channel.attribute.insert(key, Arc::new(Mutex::new(value)));
@@ -198,6 +231,21 @@ impl InboundChannelCtx {
         let mut channel = self.channel.lock().unwrap();
         channel.close()
     }
+
+    pub(crate) fn set_last_read_time(&mut self, ms: u64) {
+        let mut channel = self.channel.lock().unwrap();
+        channel.last_read_time_ms = ms;
+    }
+
+    pub(crate) fn last_read_time_ms(&self) -> u64 {
+        let channel = self.channel.lock().unwrap();
+        channel.last_read_time_ms()
+    }
+
+    pub fn read_idle_timeout_ms(&self) -> u64 {
+        let channel = self.channel.lock().unwrap();
+        channel.read_idle_timeout_ms()
+    }
 }
 
 pub struct OutboundChannelCtx {
@@ -209,6 +257,11 @@ impl OutboundChannelCtx {
         OutboundChannelCtx {
             channel
         }
+    }
+
+    pub fn id(&self) -> String {
+        let channel = self.channel.lock().unwrap();
+        format!("{}", channel.id.0).clone()
     }
 
     pub(crate) fn write_bytebuf(&mut self, buf: &ByteBuf) {

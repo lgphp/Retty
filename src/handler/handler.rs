@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use bytebuf_rs::bytebuf::ByteBuf;
 
@@ -29,6 +30,7 @@ impl ChannelInboundHandler for HeadHandler {
     }
 
     fn channel_active(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx) {
+        channel_handler_ctx.channel().set_last_read_time(chrono::Local::now().timestamp_millis() as u64);
         channel_handler_ctx.fire_channel_active();
     }
 
@@ -37,6 +39,7 @@ impl ChannelInboundHandler for HeadHandler {
     }
 
     fn channel_read(&mut self, channel_handler_ctx: &mut ChannelInboundHandlerCtx, message: &mut dyn Any) {
+        channel_handler_ctx.channel().set_last_read_time(chrono::Local::now().timestamp_millis() as u64);
         channel_handler_ctx.fire_channel_read(message);
     }
 
@@ -62,7 +65,6 @@ impl ChannelOutboundHandler for TailHandler {
 
     fn channel_write(&mut self, channel_handler_ctx: &mut ChannelOutboundHandlerCtx, message: &mut dyn Any) {
         let bytes = message.downcast_ref::<ByteBuf>();
-
         match bytes {
             Some(buf) => {
                 channel_handler_ctx.channel().write_bytebuf(buf);

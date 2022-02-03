@@ -13,5 +13,6 @@ bytebuf-rs = { git = "https://github.com/lgphp/bytebuf-rs" }
 #chrono = "0.4.19"
 rayon = "1.5"
 rayon-core = "1.9.1"
-crossbeam-utils = "0.8"
+crossbeam = "0.8"
+chrono = "0.4.19"
 uuid = { version = "0.8", features = ["serde", "v4"] }

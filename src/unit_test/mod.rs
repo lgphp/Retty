@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::{Arc, Mutex};
 
 use bytebuf_rs::bytebuf::ByteBuf;
-use crossbeam_utils::sync::WaitGroup;
+use crossbeam::sync::WaitGroup;
 use rayon_core::ThreadPool;
 use uuid::Uuid;
 

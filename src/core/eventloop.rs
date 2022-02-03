@@ -27,11 +27,10 @@ pub struct EventLoop {
 
 
 impl EventLoop {
-    pub fn new() -> EventLoop {
+    pub fn new(i: usize) -> EventLoop {
         EventLoop {
-            excutor: Arc::new(rayon::ThreadPoolBuilder::new().num_threads(1).thread_name(|mut n| {
-                n = n + 1;
-                format!("eventloop-{}", n)
+            excutor: Arc::new(rayon::ThreadPoolBuilder::new().num_threads(1).thread_name(move |_| {
+                format!("eventloop-{}", i)
             }).build().unwrap()),
             selector: Arc::new(Poll::new().unwrap()),
             channel_map: Arc::new(CHashMap::new()),
@@ -55,7 +54,6 @@ impl EventLoop {
             ctx__inbound_ctx_pipe.head_channel_active();
         }
         self.channel_inbound_handler_ctx_pipe_map.insert_new(Token(id), ctx__inbound_ctx_pipe);
-
         self.channel_map.insert_new(Token(id), channel_2);
     }
 
@@ -116,6 +114,7 @@ impl EventLoop {
                                 let ctx_pipe = channel_inbound_ctx_pipe_map.get_mut(&e.token()).unwrap();
                                 ctx_pipe.head_channel_read(&mut bytebuf);
                             }
+
                         }
                     }
                 }
@@ -131,6 +130,7 @@ impl EventLoop {
     }
 }
 
+#[derive(Clone)]
 pub struct EventLoopGroup {
     group: Vec<Arc<EventLoop>>,
     evenetloop_num: usize,
@@ -141,7 +141,7 @@ impl EventLoopGroup {
     pub fn new(n: usize) -> EventLoopGroup {
         let mut _group = Vec::<Arc<EventLoop>>::new();
         for _i in 0..n {
-            _group.push(Arc::new(EventLoop::new()));
+            _group.push(Arc::new(EventLoop::new(_i)));
         }
         EventLoopGroup {
             group: _group,
@@ -150,16 +150,16 @@ impl EventLoopGroup {
         }
     }
 
-    pub fn new_default_event_loop(n: usize) -> EventLoopGroup {
+    pub fn new_default_event_loop_group(n: usize) -> EventLoopGroup {
         EventLoopGroup::new(n)
     }
 
     pub fn next(&mut self) -> Option<Arc<EventLoop>> {
-        self.next = self.next + 1;
-        if self.next > self.evenetloop_num - 1 {
+        if self.next > self.evenetloop_num {
             self.next = 0;
         }
-        Some(self.group.get(self.next).unwrap().clone())
+        self.next = self.next + 1;
+        Some(self.group.get(self.next - 1).unwrap().clone())
     }
 
     pub fn execute<F>(&mut self, task: F) where F: FnOnce() + Send + 'static {
