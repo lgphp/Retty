@@ -56,8 +56,6 @@ use retty::handler::channel_handler_ctx::{ChannelInboundHandlerCtx, ChannelOutbo
 use retty::handler::codec::first_integer_length_field_decoder::FirstIntegerLengthFieldDecoder;
 use retty::handler::handler::{ChannelInboundHandler, ChannelOutboundHandler};
 use retty::handler::handler_pipe::{ChannelInboundHandlerPipe, ChannelOutboundHandlerPipe};
-use retty::handler::idle_state_handler::IdleStateHandler;
-
 struct BizHandler {
     excutor: Arc<ThreadPool>,
 }
