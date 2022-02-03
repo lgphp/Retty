@@ -167,8 +167,7 @@ impl Bootstrap {
 
             let mut sel = Poll::new().unwrap();
             // 将监听器绑定在selector上 , 打上Token(0)的标记，注册read事件, 也就是只监听Tcplistener的事件，后面是监听TcpStream的事件
-            sel.register(&mut listener, Token(0), Ready::readable(), PollOpt::edge())
-                .unwrap();
+            sel.register(&mut listener, Token(0), Ready::readable(), PollOpt::edge()).unwrap();
             // 循环event_loop,启动reactor线程
             work_group.event_loop_group().iter().for_each(|e| e.run());
             //当服务器没有停的时候

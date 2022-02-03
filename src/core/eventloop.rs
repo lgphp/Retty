@@ -156,7 +156,7 @@ impl EventLoopGroup {
 
     pub fn next(&mut self) -> Option<Arc<EventLoop>> {
         self.next = self.next + 1;
-        if self.next > self.evenetloop_num {
+        if self.next > self.evenetloop_num - 1 {
             self.next = 0;
         }
         Some(self.group.get(self.next).unwrap().clone())
