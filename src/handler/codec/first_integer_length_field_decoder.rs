@@ -3,7 +3,7 @@ use std::io::ErrorKind;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::Ordering;
 
-use bytebuf_rs::bytebuf::ByteBuf;
+use bytebuf_rs::bytebuf::{ByteBuf, slice_util};
 
 use crate::errors::RettyErrorKind;
 use crate::handler::channel_handler_ctx::ChannelInboundHandlerCtx;
@@ -45,7 +45,7 @@ impl ChannelInboundHandler for FirstIntegerLengthFieldDecoder {
             let buf = buf_option.unwrap();
             let n = buf.len();
             if self.all_buf.len() != 0 {
-                self.all_buf = bytebuf_rs::bytebuf::slice_util::append::<u8>(&self.all_buf, &buf[..n]);
+                self.all_buf = slice_util::append::<u8>(&self.all_buf, &buf[..n]);
             } else {
                 self.all_buf = buf[..n].to_owned();
             }
